@@ -502,6 +502,23 @@ router.get('/datamart/customer/:customerId/persona', async (req, res) => {
           [customerId]
         );
 
+        // Thêm thống kê chi tiết từ datamart_transaction để suy luận persona hành vi
+        const txStatsRes = await externalPool.query(
+          `
+            SELECT
+              COUNT(DISTINCT t."MaHD") AS orders,
+              COALESCE(SUM(t."TriGiaBan"), 0) AS gross_amount,
+              COALESCE(SUM(t."TienGiamGia"), 0) AS discount_amount,
+              COALESCE(SUM(t."SoLuong"), 0) AS total_qty,
+              COUNT(DISTINCT t."store_name") AS store_count,
+              MAX(t."store_name") FILTER (WHERE t."store_name" IS NOT NULL) AS primary_store,
+              MAX(t."category_name") FILTER (WHERE t."category_name" IS NOT NULL) AS top_category
+            FROM public.datamart_transaction t
+            WHERE t."MaTheKHTT" = $1
+          `,
+          [customerId]
+        );
+
         const s = statsRes.rows[0];
         if (!s) {
           return res.json({ persona: null });
@@ -554,6 +571,56 @@ router.get('/datamart/customer/:customerId/persona', async (req, res) => {
           freq >= 0.8 ? 'Low' :
           'Very Low';
 
+        const tx = txStatsRes.rows[0] || {};
+        const ordersTx = Number(tx.orders || 0);
+        const grossAmount = Number(tx.gross_amount || 0);
+        const discountAmount = Number(tx.discount_amount || 0);
+        const totalQty = Number(tx.total_qty || 0);
+        const avgItemsPerOrder = ordersTx > 0 ? totalQty / ordersTx : 0;
+        const discountRatio = grossAmount > 0 ? discountAmount / grossAmount : 0;
+        const topCategory = (tx.top_category || '').toString().toLowerCase();
+
+        // product_persona: suy luận đơn giản dựa trên category + AOV
+        const productPersonaTags = [];
+        if (topCategory.includes('snack')) {
+          productPersonaTags.push('Office Snacker');
+        } else if (topCategory.includes('đồ uống') || topCategory.includes('do uong')) {
+          productPersonaTags.push('Quick Meal Buyer');
+        } else if (avgBasket >= 500000 && avgItemsPerOrder >= 5) {
+          productPersonaTags.push('Full Basket Shopper');
+        } else if (avgBasket <= 200000 && avgItemsPerOrder <= 3) {
+          productPersonaTags.push('Top-up Shopper');
+        } else {
+          productPersonaTags.push('Grocery Shopper');
+        }
+
+        // payment_persona: chưa có cột phương thức thanh toán → giả định tiền mặt
+        const paymentPersona = 'Cash Only';
+
+        // price_sens: dựa trên tỉ lệ giảm giá
+        const priceSens =
+          discountRatio >= 0.15 ? 'Price Sensitive' :
+          discountRatio >= 0.05 ? 'Deal Hunter' :
+          discountRatio <= 0.01 && avgBasket >= 400000 ? 'Quality First' :
+          'Balanced';
+
+        // shopping_mission: dựa trên AOV + items/order + frequency
+        let shopMission;
+        if (avgBasket >= 700000 && avgItemsPerOrder >= 6) {
+          shopMission = 'Full Basket';
+        } else if (avgBasket >= 400000 && freq <= 1.5) {
+          shopMission = 'Weekly Stock-up';
+        } else if (avgBasket <= 200000 && freq >= 2) {
+          shopMission = 'Quick Refill';
+        } else if (avgItemsPerOrder <= 2 && avgBasket <= 150000) {
+          shopMission = 'Impulse Buy';
+        } else {
+          shopMission = 'Need-based';
+        }
+
+        // channel: datamart hiện là offline store → gán mặc định In-store Only
+        const channel = 'In-store Only';
+
         const insertRes = await configPool.query(
           `
             INSERT INTO customer_persona (
@@ -569,7 +636,7 @@ router.get('/datamart/customer/:customerId/persona', async (req, res) => {
               channel,
               note
             )
-            VALUES ($1, $2, $3, $4, $5, ARRAY[]::text[], NULL, NULL, NULL, NULL, NULL)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NULL)
             RETURNING
               value_seg,
               lifecycle,
@@ -582,7 +649,18 @@ router.get('/datamart/customer/:customerId/persona', async (req, res) => {
               channel,
               note
           `,
-          [customerId, valueSeg, lifecycle, aovLevel, freqLevel]
+          [
+            customerId,
+            valueSeg,
+            lifecycle,
+            aovLevel,
+            freqLevel,
+            productPersonaTags,
+            paymentPersona,
+            priceSens,
+            shopMission,
+            channel
+          ]
         );
 
         const autoRow = insertRes.rows[0];
