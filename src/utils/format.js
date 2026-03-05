@@ -7,7 +7,7 @@ export const formatValue = (n) => {
   return v.toLocaleString("vi-VN");
 };
 
-export const formatNumber = (n) => n ? Number(n).toLocaleString("vi-VN") : "—";
+export const formatNumber = (n) => (n != null && n !== "") ? Number(n).toLocaleString("vi-VN") : "—";
 
 export const pctChange = (cur, prev) => {
   if (!prev || !cur) return null;

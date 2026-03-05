@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { T, ic, ALL_TABS, ROLES } from './constants/index.js';
+import { useLocation, useNavigate, NavLink, Navigate } from 'react-router-dom';
+import { T, ic, ALL_TABS, ROLES, tabToPath, pathToTab } from './constants/index.js';
 import { globalCSS } from './styles/global.js';
 import { useAuth } from './hooks/useAuth.js';
 import { usePermissions } from './hooks/usePermissions.js';
@@ -9,15 +10,44 @@ import { NoAccess } from './components/NoAccess.jsx';
 import { PermEditor } from './components/PermEditor.jsx';
 import { DEMO } from './data/demo.js';
 import { Settings } from './pages/Settings.jsx';
+import { Overview } from './pages/Overview.jsx';
+import { dbApi } from './services/api.js';
 
 export default function MenasDX() {
   const auth = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const tab = pathToTab(location.pathname);
   const { canView, canExport, isAdmin, visibleTabs } = usePermissions(auth.currentUser, ALL_TABS);
 
   // App State
-  const [tab, setTab] = useState("overview");
   const [dbOn, setDbOn] = useState(false);
+  const [dbCfg, setDbCfg] = useState(null);
   const [data] = useState(DEMO);
+
+  useEffect(() => {
+    dbApi.getConfig().then(({ config }) => {
+      if (config?.is_active) {
+        setDbOn(true);
+        setDbCfg(config);
+      }
+    }).catch(() => {});
+  }, []);
+
+  // Khi vào tab Tổng quan, đồng bộ lại config và trigger gọi API overview nếu đã lưu DB
+  const [overviewRefetchKey, setOverviewRefetchKey] = useState(0);
+  useEffect(() => {
+    if (tab !== 'overview') return;
+    dbApi.getConfig()
+      .then(({ config }) => {
+        if (config?.is_active) {
+          setDbOn(true);
+          setDbCfg((c) => c ?? config);
+          setOverviewRefetchKey((k) => k + 1);
+        }
+      })
+      .catch(() => {});
+  }, [tab]);
 
   // Activity Log
   const [activityLog, setActivityLog] = useState([
@@ -68,12 +98,17 @@ export default function MenasDX() {
     );
   }
 
+  if (location.pathname === '/' || location.pathname === '') {
+    return <Navigate to="/overview" replace />;
+  }
+
   // Main App
   const renderTab = () => {
     const ok = canView(tab);
     // Tạm thời return placeholder, sẽ được thay thế bằng các page components
     switch (tab) {
       case "overview":
+        return ok ? <Overview dbOn={dbOn} demoData={data} canExport={canExport} refetchKey={overviewRefetchKey} /> : <NoAccess />;
       case "customers":
       case "segment":
       case "sales":
@@ -87,7 +122,7 @@ export default function MenasDX() {
       case "activity_log":
         return isAdmin ? <div className="fu">Activity Log - Coming soon</div> : <NoAccess />;
       case "settings":
-        return isAdmin ? <Settings currentUser={auth.currentUser} addLog={addLog} /> : <NoAccess />;
+        return isAdmin ? <Settings currentUser={auth.currentUser} addLog={addLog} onDbConnect={() => { setDbOn(true); dbApi.getConfig().then(({ config }) => setDbCfg(config || null)); }} /> : <NoAccess />;
       case "user_mgmt":
         return isAdmin ? (
           <div className="fu">
@@ -144,7 +179,7 @@ export default function MenasDX() {
           {/* DB status sẽ được update từ Settings page */}
           <Dot on={dbOn} />
           <div style={{ width: 1, height: 20, background: T.cardBorder, margin: "0 4px" }} />
-          <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 10px", borderRadius: 8, background: T.surfaceAlt, cursor: "pointer" }} onClick={() => setTab("user_mgmt")}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 10px", borderRadius: 8, background: T.surfaceAlt, cursor: "pointer" }} onClick={() => navigate(tabToPath('user_mgmt'))}>
             <div style={{ width: 24, height: 24, borderRadius: "50%", background: `${ROLES[auth.currentUser?.role]?.color || T.info}30`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 800, color: ROLES[auth.currentUser?.role]?.color || T.info }}>{auth.currentUser?.avatar}</div>
             <div>
               <div style={{ fontSize: 11, fontWeight: 600, color: T.text }}>{auth.currentUser?.name}</div>
@@ -157,18 +192,23 @@ export default function MenasDX() {
       {/* TABS */}
       <nav style={{ padding: "0 22px", borderBottom: `1px solid ${T.cardBorder}`, display: "flex", gap: 1, overflowX: "auto", background: T.bg }}>
         {visibleTabs.map(t => (
-          <button key={t.id} className={`tab ${tab === t.id ? 'on' : ''}`} onClick={() => { setTab(t.id); addLog("view", t.id, "Mở tab " + t.label); }}>
+          <NavLink
+            key={t.id}
+            to={tabToPath(t.id)}
+            className={({ isActive }) => `tab ${isActive ? 'on' : ''}`}
+            onClick={() => addLog("view", t.id, "Mở tab " + t.label)}
+          >
             <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
               <Icon d={t.icon} s={13} />{t.label}
             </span>
-          </button>
+          </NavLink>
         ))}
       </nav>
       {/* CONTENT */}
       <main style={{ padding: "18px 22px", maxWidth: 1380, margin: "0 auto" }} key={tab}>{renderTab()}</main>
       {/* FOOTER */}
       <footer style={{ padding: "10px 22px", borderTop: `1px solid ${T.cardBorder}`, textAlign: "center", fontSize: 10, color: T.textMuted }}>
-        Menas DX © 2026 · {auth.currentUser?.name} ({ROLES[auth.currentUser?.role]?.label}) · {dbOn ? `DB: ${dbCfg.host}` : "Demo"}{canExport ? " · Export ✓" : " · Export ✗"}
+        Menas DX © 2026 · {auth.currentUser?.name} ({ROLES[auth.currentUser?.role]?.label}) · {dbOn && dbCfg ? `DB: ${dbCfg.host}` : dbOn ? "DB connected" : "Demo"}{canExport ? " · Export ✓" : " · Export ✗"}
       </footer>
     </div>
   );

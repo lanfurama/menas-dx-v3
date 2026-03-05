@@ -1,0 +1,1 @@
+-- Table datamart_localtion does not exist

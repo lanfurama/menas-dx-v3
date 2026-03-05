@@ -6,7 +6,7 @@ import { Section } from '../components/Section.jsx';
 import { Toggle } from '../components/Toggle.jsx';
 import { dbApi, aiApi } from '../services/api.js';
 
-export const Settings = ({ currentUser, addLog }) => {
+export const Settings = ({ currentUser, addLog, onDbConnect }) => {
   const [dbCfg, setDbCfg] = useState({ name: 'default', host: '', port: '5432', database: '', username: '', password: '', ssl: false });
   const [dbOn, setDbOn] = useState(false);
   const [dbTest, setDbTest] = useState(false);
@@ -132,6 +132,7 @@ export const Settings = ({ currentUser, addLog }) => {
       setDbError('');
       await dbApi.saveConfig(dbCfg);
       setDbOn(true);
+      onDbConnect?.();
       addLog('save', 'settings', 'Lưu cấu hình database');
       alert('Đã lưu cấu hình database');
     } catch (error) {

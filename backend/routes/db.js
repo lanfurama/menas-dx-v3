@@ -274,18 +274,19 @@ router.post('/test', async (req, res) => {
   }
 });
 
-// Helper function to get active external pool
+// Lấy pool kết nối đến database BÊN NGOÀI theo cấu hình đã LƯU trong bảng db_config (database config của hệ thống).
+// Mọi dữ liệu datamart (overview, customer, transaction) CHỈ lấy từ DB ngoài theo config đã lưu, không dùng config từ "Test kết nối".
 const getActiveExternalPool = async () => {
   const result = await configPool.query(
     'SELECT * FROM db_config WHERE is_active = true LIMIT 1'
   );
   if (result.rows.length === 0) {
-    throw new Error('No active database configuration found');
+    throw new Error('Chưa có cấu hình DB active. Vào Cài đặt → Lưu cấu hình để lấy dữ liệu từ database bên ngoài.');
   }
   return createExternalPool(result.rows[0]);
 };
 
-// Query datamart_customer table
+// Query datamart_customer table (no id column: use MaTheKHTT)
 router.get('/datamart/customer', async (req, res) => {
   try {
     const { limit = 100, offset = 0 } = req.query;
@@ -293,7 +294,7 @@ router.get('/datamart/customer', async (req, res) => {
     
     const result = await externalPool.query(
       `SELECT * FROM public.datamart_customer 
-       ORDER BY id 
+       ORDER BY "MaTheKHTT" NULLS LAST, "NgayHD" DESC NULLS LAST 
        LIMIT $1 OFFSET $2`,
       [parseInt(limit), parseInt(offset)]
     );
@@ -314,7 +315,7 @@ router.get('/datamart/customer', async (req, res) => {
   }
 });
 
-// Query datamart_transaction table
+// Query datamart_transaction table (no id column: use NgayGioQuet, MaHD)
 router.get('/datamart/transaction', async (req, res) => {
   try {
     const { limit = 100, offset = 0 } = req.query;
@@ -322,7 +323,7 @@ router.get('/datamart/transaction', async (req, res) => {
     
     const result = await externalPool.query(
       `SELECT * FROM public.datamart_transaction 
-       ORDER BY id 
+       ORDER BY "NgayGioQuet" DESC NULLS LAST, "MaHD" NULLS LAST 
        LIMIT $1 OFFSET $2`,
       [parseInt(limit), parseInt(offset)]
     );
@@ -343,22 +344,25 @@ router.get('/datamart/transaction', async (req, res) => {
   }
 });
 
-// Query datamart_localtion table
+// Query datamart_localtion table (table may not exist)
 router.get('/datamart/location', async (req, res) => {
   try {
     const { limit = 100, offset = 0 } = req.query;
     const externalPool = await getActiveExternalPool();
     
+    const tableExists = await externalPool.query(`
+      SELECT EXISTS (SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' AND table_name = 'datamart_localtion')
+    `);
+    if (!tableExists.rows[0].exists) {
+      return res.json({ data: [], total: 0, limit: parseInt(limit), offset: parseInt(offset) });
+    }
+    
     const result = await externalPool.query(
-      `SELECT * FROM public.datamart_localtion 
-       ORDER BY id 
-       LIMIT $1 OFFSET $2`,
+      `SELECT * FROM public.datamart_localtion LIMIT $1 OFFSET $2`,
       [parseInt(limit), parseInt(offset)]
     );
-    
-    const countResult = await externalPool.query(
-      'SELECT COUNT(*) FROM public.datamart_localtion'
-    );
+    const countResult = await externalPool.query('SELECT COUNT(*) FROM public.datamart_localtion');
     
     res.json({
       data: result.rows,
@@ -368,6 +372,113 @@ router.get('/datamart/location', async (req, res) => {
     });
   } catch (error) {
     console.error('Error querying datamart_localtion:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Overview: dữ liệu tổng hợp từ DB bên ngoài theo config đã lưu trong db_config
+// Dùng tên cột có dấu ngoặc kép vì bảng có thể tạo với tên hoa (MaTheKHTT, ThanhTienBan, ...)
+router.get('/datamart/overview', async (req, res) => {
+  try {
+    const externalPool = await getActiveExternalPool();
+    const [custStats, revStats, revByMonth, topStores, topCats, segs] = await Promise.all([
+      externalPool.query(`
+        SELECT 
+          COUNT(DISTINCT "MaTheKHTT") AS total_customers,
+          COUNT(DISTINCT CASE WHEN COALESCE("status",'') = 'active' OR COALESCE("status",'') = '' THEN "MaTheKHTT" END) AS active_customers,
+          COUNT(*) AS rows_count
+        FROM public.datamart_customer
+      `),
+      externalPool.query(`
+        SELECT 
+          COALESCE(SUM("ThanhTienBan"), 0) AS total_revenue,
+          COUNT(DISTINCT "MaHD") AS total_orders,
+          COUNT(*) AS rows_count
+        FROM public.datamart_transaction
+      `),
+      externalPool.query(`
+        SELECT 
+          TO_CHAR("NgayGioQuet"::date, 'TMM') AS month,
+          EXTRACT(MONTH FROM "NgayGioQuet") AS m,
+          COALESCE(SUM("ThanhTienBan"), 0) AS revenue,
+          COUNT(DISTINCT "MaHD") AS orders
+        FROM public.datamart_transaction
+        WHERE "NgayGioQuet" IS NOT NULL
+        GROUP BY TO_CHAR("NgayGioQuet"::date, 'TMM'), EXTRACT(MONTH FROM "NgayGioQuet")
+        ORDER BY m
+      `),
+      externalPool.query(`
+        SELECT 
+          COALESCE("store_name", 'N/A') AS store_name,
+          COALESCE(SUM("ThanhTienBan"), 0) AS revenue,
+          COUNT(DISTINCT "MaHD") AS orders
+        FROM public.datamart_transaction
+        GROUP BY "store_name"
+        ORDER BY revenue DESC
+        LIMIT 10
+      `),
+      externalPool.query(`
+        SELECT 
+          COALESCE("category_name", 'N/A') AS name,
+          COALESCE(SUM("ThanhTienBan"), 0) AS revenue,
+          COUNT(DISTINCT "MaHD") AS orders
+        FROM public.datamart_transaction
+        GROUP BY "category_name"
+        ORDER BY revenue DESC
+        LIMIT 10
+      `),
+      externalPool.query(`
+        SELECT 
+          COALESCE("loyalty_tier", 'N/A') AS name,
+          COUNT(DISTINCT "MaTheKHTT") AS value
+        FROM public.datamart_customer
+        GROUP BY "loyalty_tier"
+        ORDER BY value DESC
+        LIMIT 10
+      `)
+    ]);
+    
+    const c = custStats.rows[0] || {};
+    const r = revStats.rows[0] || {};
+    const totalRev = Number(r.total_revenue) || 0;
+    const totalOrd = parseInt(r.total_orders) || 0;
+    const aov = totalOrd > 0 ? Math.round(totalRev / totalOrd) : 0;
+    
+    const colors = ['#e0e0e0', '#c8965a', '#5bb8f5', '#8888a0', '#ef5350', '#a78bfa', '#2dd4bf', '#f0c040', '#f472b6', '#6366f1'];
+    const segmentation = (segs.rows || []).map((s, i) => ({
+      name: s.name,
+      value: parseInt(s.value) || 0,
+      color: colors[i % colors.length]
+    }));
+    
+    res.json({
+      overview: {
+        total_customers: parseInt(c.total_customers) || 0,
+        active_customers: parseInt(c.active_customers) || 0,
+        new_this_month: null,
+        avg_order_value: aov,
+        total_revenue: totalRev,
+        total_orders: totalOrd
+      },
+      revenueByMonth: (revByMonth.rows || []).map(row => ({
+        month: row.month || 'T' + row.m,
+        revenue: Math.round(Number(row.revenue) / 1e6),
+        orders: parseInt(row.orders) || 0
+      })),
+      topStores: (topStores.rows || []).map(s => ({
+        store_name: s.store_name,
+        revenue: Number(s.revenue) || 0,
+        orders: parseInt(s.orders) || 0
+      })),
+      catPerf: (topCats.rows || []).map(cat => ({
+        name: cat.name,
+        revenue: Number(cat.revenue) || 0,
+        orders: parseInt(cat.orders) || 0
+      })),
+      segmentation
+    });
+  } catch (error) {
+    console.error('Error querying datamart overview:', error);
     res.status(500).json({ error: error.message });
   }
 });

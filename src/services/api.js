@@ -54,6 +54,7 @@ export const dbApi = {
     const query = new URLSearchParams(params).toString();
     return request(`/db/datamart/location${query ? `?${query}` : ''}`);
   },
+  getOverview: () => request('/db/datamart/overview'),
 };
 
 export const aiApi = {

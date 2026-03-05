@@ -1,0 +1,22 @@
+CREATE TABLE IF NOT EXISTS public.datamart_transaction (
+  MaTheKHTT VARCHAR(50),
+  HoaDonID VARCHAR(50),
+  MaHD VARCHAR(50),
+  MaHH VARCHAR(50),
+  TenHH VARCHAR(255),
+  category_name VARCHAR(255),
+  NgayGioQuet TIMESTAMP,
+  MaCH VARCHAR(50),
+  store_name VARCHAR(255),
+  TenQuay VARCHAR(100),
+  TenKho VARCHAR(100),
+  STT INTEGER,
+  SoLuong NUMERIC(18,2),
+  DGBan NUMERIC(18,2),
+  TriGiaBan NUMERIC(18,2),
+  TLCKGiamGia NUMERIC(18,2),
+  TienGiamGia NUMERIC(18,2),
+  ThanhTienBan NUMERIC(18,2),
+  VATDauRa NUMERIC(18,2),
+  TriGiaVATDauRa NUMERIC(18,2)
+);
