@@ -12,6 +12,7 @@ import { DEMO } from './data/demo.js';
 import { Settings } from './pages/Settings.jsx';
 import { Overview } from './pages/Overview.jsx';
 import { Customers } from './pages/Customers.jsx';
+import { Segment } from './pages/Segment.jsx';
 import { UserManagement } from './pages/UserManagement.jsx';
 import { dbApi } from './services/api.js';
 
@@ -26,6 +27,11 @@ export default function MenasDX() {
   const [dbOn, setDbOn] = useState(false);
   const [dbCfg, setDbCfg] = useState(null);
   const [data] = useState(DEMO);
+  const [theme, setTheme] = useState(() => {
+    if (typeof window === 'undefined') return 'dark';
+    const stored = window.localStorage.getItem('menas_theme');
+    return stored === 'light' ? 'light' : 'dark';
+  });
 
   // Check database connection health
   const checkDbHealth = async () => {
@@ -55,6 +61,15 @@ export default function MenasDX() {
     const interval = setInterval(checkDbHealth, 30000);
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem('menas_theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme(prev => (prev === 'dark' ? 'light' : 'dark'));
+  };
 
   // Khi vào tab Tổng quan, đồng bộ lại config và trigger gọi API overview nếu đã lưu DB
   const [overviewRefetchKey, setOverviewRefetchKey] = useState(0);
@@ -89,14 +104,25 @@ export default function MenasDX() {
   // Login Screen
   if (!auth.loggedIn) {
     return (
-      <div style={{ minHeight: "100vh", background: T.bg, fontFamily: "'Outfit',sans-serif", color: T.text, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div
+        className={`app-root theme-${theme}`}
+        style={{
+          minHeight: "100vh",
+          background: theme === 'dark' ? T.bg : "#f4f4f8",
+          fontFamily: "'Be Vietnam Pro',system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",
+          color: theme === 'dark' ? T.text : "#111827",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center"
+        }}
+      >
         <style>{globalCSS}</style>
         <div className="card" style={{ maxWidth: 400, width: "100%" }}>
           <div style={{ textAlign: "center", marginBottom: 24 }}>
             <div style={{ width: 64, height: 64, borderRadius: 16, background: T.grad, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
               <Icon d={ic.layers} s={32} c={T.bg} />
             </div>
-            <div style={{ fontSize: 24, fontWeight: 800, fontFamily: "'Libre Baskerville',serif", letterSpacing: "-.02em" }}>
+            <div style={{ fontSize: 24, fontWeight: 800, fontFamily: "'Be Vietnam Pro',system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif", letterSpacing: "-.02em" }}>
               <span style={{ color: T.accent }}>MENAS</span> <span style={{ color: T.text }}>DX</span>
             </div>
             <div style={{ fontSize: 12, color: T.textMuted, marginTop: 4 }}>Customer 360° + AI + ZNS</div>
@@ -130,6 +156,7 @@ export default function MenasDX() {
       case "customers":
         return ok ? <Customers dbOn={dbOn} demoData={data} canExport={canExport} addLog={addLog} /> : <NoAccess />;
       case "segment":
+        return ok ? <Segment dbOn={dbOn} demoData={data} canExport={canExport} addLog={addLog} /> : <NoAccess />;
       case "sales":
       case "marketing":
       case "zalo":
@@ -150,7 +177,15 @@ export default function MenasDX() {
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: T.bg, fontFamily: "'Outfit',sans-serif", color: T.text }}>
+    <div
+      className={`app-root theme-${theme}`}
+      style={{
+        minHeight: "100vh",
+        background: theme === 'dark' ? T.bg : "#f4f4f8",
+        fontFamily: "'Be Vietnam Pro',system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",
+        color: theme === 'dark' ? T.text : "#111827"
+      }}
+    >
       <style>{globalCSS}</style>
       {/* HEADER */}
       <header style={{ padding: "10px 22px", borderBottom: `1px solid ${T.cardBorder}`, display: "flex", alignItems: "center", justifyContent: "space-between", background: T.surface }}>
@@ -159,13 +194,21 @@ export default function MenasDX() {
             <Icon d={ic.layers} s={15} c={T.bg} />
           </div>
           <div>
-            <div style={{ fontSize: 16, fontWeight: 800, fontFamily: "'Libre Baskerville',serif", letterSpacing: "-.02em" }}>
+            <div style={{ fontSize: 16, fontWeight: 800, fontFamily: "'Be Vietnam Pro',system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif", letterSpacing: "-.02em" }}>
               <span style={{ color: T.accent }}>MENAS</span> <span style={{ color: T.text }}>DX</span>
             </div>
             <div style={{ fontSize: 8, color: T.textMuted, letterSpacing: ".1em", textTransform: "uppercase" }}>Customer 360° + AI + ZNS</div>
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <button
+            className="btn btn-g btn-sm"
+            onClick={toggleTheme}
+            title={theme === 'dark' ? 'Chuyển Light mode' : 'Chuyển Dark mode'}
+          >
+            <Icon d={ic.sparkle} s={13} />
+            {theme === 'dark' ? 'Dark' : 'Light'}
+          </button>
           {/* DB status sẽ được update từ Settings page */}
           <Dot on={dbOn} />
           <div style={{ width: 1, height: 20, background: T.cardBorder, margin: "0 4px" }} />

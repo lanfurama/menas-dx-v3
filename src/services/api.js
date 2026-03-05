@@ -61,6 +61,7 @@ export const dbApi = {
     return request(`/db/datamart/location${query ? `?${query}` : ''}`);
   },
   getOverview: () => request('/db/datamart/overview'),
+  getCustomerPersona: (customerId) => request(`/db/datamart/customer/${customerId}/persona`),
 };
 
 export const aiApi = {

@@ -406,8 +406,8 @@ router.get('/datamart/transaction', async (req, res) => {
     }));
     
     let countQuery = `
-      SELECT COUNT(DISTINCT "MaHD") 
-      FROM public.datamart_transaction
+      SELECT COUNT(DISTINCT t."MaHD")
+      FROM public.datamart_transaction t
       ${whereClause}
     `;
     const countResult = await externalPool.query(countQuery, customerId ? [customerId] : []);
@@ -443,6 +443,186 @@ router.get('/datamart/customer/:customerId/details', async (req, res) => {
     });
   } catch (error) {
     console.error('Error getting customer details:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Lấy customer persona từ database cấu hình (menas_dx_config.customer_persona)
+router.get('/datamart/customer/:customerId/persona', async (req, res) => {
+  try {
+    const { customerId } = req.params;
+
+    // 1) Thử lấy persona đã được cấu hình thủ công
+    const result = await configPool.query(
+      `
+        SELECT
+          value_seg,
+          lifecycle,
+          aov_level,
+          freq_level,
+          product_persona,
+          payment_persona,
+          price_sens,
+          shop_mission,
+          channel,
+          note
+        FROM customer_persona
+        WHERE MaTheKHTT = $1
+        LIMIT 1
+      `,
+      [customerId]
+    );
+
+    if (result.rows.length === 0) {
+      // 2) Nếu chưa có, auto-generate persona từ RFM / AOV dựa trên datamart_customer
+      try {
+        const externalPool = await getActiveExternalPool();
+        const statsRes = await externalPool.query(
+          `
+            SELECT
+              COUNT(DISTINCT c."MaHD") AS total_orders,
+              COALESCE(SUM(c."ThanhTienBan"), 0) AS total_spent,
+              MAX(c."NgayHD") AS last_purchase,
+              MIN(c."NgayHD") AS first_purchase,
+              CASE 
+                WHEN MAX(c."NgayHD") IS NOT NULL AND MIN(c."NgayHD") IS NOT NULL
+                THEN ROUND(
+                  COUNT(DISTINCT c."MaHD")::NUMERIC / 
+                  GREATEST(
+                    EXTRACT(EPOCH FROM (MAX(c."NgayHD") - MIN(c."NgayHD"))) / 2592000.0,
+                    1
+                  ),
+                  2
+                )
+                ELSE 0
+              END AS frequency_month
+            FROM public.datamart_customer c
+            WHERE c."MaTheKHTT" = $1
+          `,
+          [customerId]
+        );
+
+        const s = statsRes.rows[0];
+        if (!s) {
+          return res.json({ persona: null });
+        }
+
+        const totalSpent = Number(s.total_spent || 0);
+        const freq = Number(s.frequency_month || 0);
+        const lastPurchase = s.last_purchase ? new Date(s.last_purchase) : null;
+        const daysSince = lastPurchase ? Math.floor((Date.now() - lastPurchase.getTime()) / 864e5) : 999;
+
+        const rScore = daysSince <= 7 ? 5 : daysSince <= 30 ? 4 : daysSince <= 60 ? 3 : daysSince <= 120 ? 2 : 1;
+        const fScore = freq >= 4 ? 5 : freq >= 2.5 ? 4 : freq >= 1.5 ? 3 : freq >= 0.8 ? 2 : 1;
+        const mScore = totalSpent >= 50e6 ? 5 : totalSpent >= 20e6 ? 4 : totalSpent >= 10e6 ? 3 : totalSpent >= 5e6 ? 2 : 1;
+        const totalRFM = rScore + fScore + mScore;
+
+        const segment =
+          totalRFM >= 13 ? 'Champions' :
+          totalRFM >= 10 ? 'Loyal' :
+          totalRFM >= 7 ? 'Potential' :
+          totalRFM >= 5 ? 'At Risk' :
+          'Hibernating';
+
+        const valueSeg =
+          segment === 'Champions' ? 'Super VIP' :
+          segment === 'Loyal' ? 'VIP' :
+          segment === 'Potential' ? 'Regular' :
+          'Low';
+
+        const lifecycle =
+          segment === 'Champions' || segment === 'Loyal' ? 'Loyal' :
+          segment === 'Potential' ? 'Growing' :
+          segment === 'At Risk' ? 'Declining' :
+          'Churning';
+
+        const avgBasket = s.total_orders > 0
+          ? Number(totalSpent / Number(s.total_orders || 1))
+          : 0;
+
+        const aovLevel =
+          avgBasket >= 500000 ? 'High' :
+          avgBasket >= 300000 ? 'Medium-High' :
+          avgBasket >= 150000 ? 'Medium' :
+          avgBasket >= 50000 ? 'Low-Medium' :
+          'Low';
+
+        const freqLevel =
+          freq >= 4 ? 'Very High' :
+          freq >= 2.5 ? 'High' :
+          freq >= 1.5 ? 'Medium' :
+          freq >= 0.8 ? 'Low' :
+          'Very Low';
+
+        const insertRes = await configPool.query(
+          `
+            INSERT INTO customer_persona (
+              MaTheKHTT,
+              value_seg,
+              lifecycle,
+              aov_level,
+              freq_level,
+              product_persona,
+              payment_persona,
+              price_sens,
+              shop_mission,
+              channel,
+              note
+            )
+            VALUES ($1, $2, $3, $4, $5, ARRAY[]::text[], NULL, NULL, NULL, NULL, NULL)
+            RETURNING
+              value_seg,
+              lifecycle,
+              aov_level,
+              freq_level,
+              product_persona,
+              payment_persona,
+              price_sens,
+              shop_mission,
+              channel,
+              note
+          `,
+          [customerId, valueSeg, lifecycle, aovLevel, freqLevel]
+        );
+
+        const autoRow = insertRes.rows[0];
+        return res.json({
+          persona: {
+            value_seg: autoRow.value_seg,
+            lifecycle: autoRow.lifecycle,
+            aov_level: autoRow.aov_level,
+            freq_level: autoRow.freq_level,
+            product_persona: autoRow.product_persona || [],
+            payment_persona: autoRow.payment_persona,
+            price_sens: autoRow.price_sens,
+            shop_mission: autoRow.shop_mission,
+            channel: autoRow.channel,
+            note: autoRow.note,
+          },
+        });
+      } catch (e) {
+        console.error('Error auto-generating customer persona:', e);
+        return res.json({ persona: null });
+      }
+    }
+
+    const row = result.rows[0];
+    res.json({
+      persona: {
+        value_seg: row.value_seg || null,
+        lifecycle: row.lifecycle || null,
+        aov_level: row.aov_level || null,
+        freq_level: row.freq_level || null,
+        product_persona: Array.isArray(row.product_persona) ? row.product_persona : (row.product_persona ? [row.product_persona] : []),
+        payment_persona: row.payment_persona || null,
+        price_sens: row.price_sens || null,
+        shop_mission: row.shop_mission || null,
+        channel: row.channel || null,
+        note: row.note || null,
+      },
+    });
+  } catch (error) {
+    console.error('Error getting customer persona:', error);
     res.status(500).json({ error: error.message });
   }
 });

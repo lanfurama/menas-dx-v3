@@ -37,7 +37,10 @@ export function Customers({ dbOn, demoData, canExport, addLog }) {
   const [expandedOrder, setExpandedOrder] = useState(null);
   const [customerDetails, setCustomerDetails] = useState(null);
   const [customerOrders, setCustomerOrders] = useState([]);
+  const [customerPersona, setCustomerPersona] = useState(null);
   const [loadingDetails, setLoadingDetails] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
 
   const { data: apiData, loading, error } = useCustomers(dbOn, { limit: 1000, offset: 0 });
   
@@ -46,23 +49,27 @@ export function Customers({ dbOn, demoData, canExport, addLog }) {
     if (!selCustomer || !dbOn) {
       setCustomerDetails(null);
       setCustomerOrders([]);
+      setCustomerPersona(null);
       return;
     }
     
     const loadDetails = async () => {
       setLoadingDetails(true);
       try {
-        const [details, orders] = await Promise.all([
+        const [details, orders, personaRes] = await Promise.all([
           dbApi.getCustomerDetails(selCustomer.MaTheKHTT),
-          dbApi.getCustomerOrders(selCustomer.MaTheKHTT, { limit: 100 })
+          dbApi.getCustomerOrders(selCustomer.MaTheKHTT, { limit: 100 }),
+          dbApi.getCustomerPersona(selCustomer.MaTheKHTT),
         ]);
         
         setCustomerDetails(details);
         setCustomerOrders(orders.data || []);
+        setCustomerPersona(personaRes.persona || null);
       } catch (err) {
         console.error('Error loading customer details:', err);
         setCustomerDetails(null);
         setCustomerOrders([]);
+        setCustomerPersona(null);
       } finally {
         setLoadingDetails(false);
       }
@@ -89,13 +96,17 @@ export function Customers({ dbOn, demoData, canExport, addLog }) {
         const freq = Number(c.frequency_month || 0);
         const lastPurchase = c.last_purchase ? new Date(c.last_purchase) : null;
         const daysSince = lastPurchase ? Math.floor((new Date() - lastPurchase) / 864e5) : 999;
-        
-        let segment = 'Regular';
-        if (totalSpent >= 50e6 && freq >= 4 && daysSince <= 30) segment = 'Champions';
-        else if (totalSpent >= 20e6 && freq >= 2 && daysSince <= 60) segment = 'Loyal';
-        else if (totalSpent >= 10e6 && freq >= 1 && daysSince <= 90) segment = 'Potential';
-        else if (daysSince > 120 && daysSince <= 180) segment = 'At Risk';
-        else if (daysSince > 180) segment = 'Hibernating';
+
+        const rScore = daysSince <= 7 ? 5 : daysSince <= 30 ? 4 : daysSince <= 60 ? 3 : daysSince <= 120 ? 2 : 1;
+        const fScore = freq >= 4 ? 5 : freq >= 2.5 ? 4 : freq >= 1.5 ? 3 : freq >= 0.8 ? 2 : 1;
+        const mScore = totalSpent >= 50e6 ? 5 : totalSpent >= 20e6 ? 4 : totalSpent >= 10e6 ? 3 : totalSpent >= 5e6 ? 2 : 1;
+        const totalRFM = rScore + fScore + mScore;
+        const segment =
+          totalRFM >= 13 ? 'Champions'
+          : totalRFM >= 10 ? 'Loyal'
+          : totalRFM >= 7 ? 'Potential'
+          : totalRFM >= 5 ? 'At Risk'
+          : 'Hibernating';
         
         return {
           id: c.MaTheKHTT,
@@ -110,11 +121,11 @@ export function Customers({ dbOn, demoData, canExport, addLog }) {
           first_purchase: formatDate(c.first_purchase),
           avg_basket: Number(c.avg_basket || 0),
           frequency_month: freq,
-          top_categories: [], // Sẽ lấy từ transaction table sau
-          top_products: [], // Sẽ lấy từ transaction table sau
-          segment: segment,
+          top_categories: [], // Sẽ được map từ customerDetails khi có
+          top_products: [], // Sẽ được map từ customerDetails khi có
+          segment,
           store_primary: c.store_primary || '',
-          transaction_stores: [], // Sẽ lấy từ transaction table sau
+          transaction_stores: [], // Sẽ được map từ customerDetails khi có
           has_zalo: false, // Không có trong bảng
           zalo_oa_follow: false, // Không có trong bảng
           persona: {}
@@ -159,6 +170,17 @@ export function Customers({ dbOn, demoData, canExport, addLog }) {
     return s;
   }, [customers, searchQ, custStore, custTier, custSegment, custSpendMin, custSpendMax, custLastFrom, custLastTo, custSort]);
 
+  const totalFiltered = filteredCust.length;
+  const totalPages = Math.max(1, Math.ceil(totalFiltered / pageSize));
+  const paginatedCust = useMemo(
+    () => filteredCust.slice((page - 1) * pageSize, page * pageSize),
+    [filteredCust, page, pageSize]
+  );
+
+  useEffect(() => {
+    setPage(1);
+  }, [searchQ, custStore, custTier, custSegment, custSpendMin, custSpendMax, custLastFrom, custLastTo, custSort]);
+
   const resetCustFilter = () => {
     setCustStore('all');
     setCustTier('all');
@@ -169,17 +191,40 @@ export function Customers({ dbOn, demoData, canExport, addLog }) {
     setCustLastTo('');
     setCustSort('total_spent_desc');
     setSearchQ('');
+    setPage(1);
   };
 
   const hasActiveFilter = custStore !== 'all' || custTier !== 'all' || custSegment !== 'all' || custSpendMin || custSpendMax || custLastFrom || custLastTo;
 
-  const selOrders = selCustomer ? (DEMO_ORDERS[selCustomer.id] || []) : [];
+  const selOrders = dbOn
+    ? (customerOrders || [])
+    : (selCustomer ? (DEMO_ORDERS[selCustomer.id] || []) : []);
   const filteredOrders = selOrders.filter(o => {
     if (orderDateFrom && o.date < orderDateFrom) return false;
     if (orderDateTo && o.date > orderDateTo) return false;
     if (orderStore !== 'all' && o.store !== orderStore) return false;
     return true;
   });
+
+  const enrichedCustomer = selCustomer
+    ? (() => {
+        if (!dbOn || !customerDetails) {
+          return customerPersona
+            ? { ...selCustomer, persona: customerPersona }
+            : selCustomer;
+        }
+        const mappedDetails = {
+          top_categories: customerDetails.categories || selCustomer.top_categories || [],
+          top_products: customerDetails.products || selCustomer.top_products || [],
+          transaction_stores: customerDetails.stores || selCustomer.transaction_stores || []
+        };
+        return {
+          ...selCustomer,
+          ...mappedDetails,
+          persona: customerPersona || selCustomer.persona || {}
+        };
+      })()
+    : null;
 
   const selRFM = enrichedCustomer ? (() => {
     const c = enrichedCustomer;
@@ -327,14 +372,25 @@ export function Customers({ dbOn, demoData, canExport, addLog }) {
           </div>
         )}
 
-        {/* Result count */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-          <span style={{ fontSize: 11, color: T.textSec }}>{filteredCust.length} / {customers.length} khách hàng</span>
+        {/* Result count + page size */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
+          <span style={{ fontSize: 11, color: T.textSec }}>
+            Hiển thị {totalFiltered ? `${(page - 1) * pageSize + 1}–${Math.min(page * pageSize, totalFiltered)}` : '0–0'} / {totalFiltered} khách hàng
+            {customers.length !== totalFiltered && ` (tổng ${customers.length})`}
+          </span>
+          <select
+            className="inp"
+            value={pageSize}
+            onChange={e => { setPageSize(Number(e.target.value)); setPage(1); }}
+            style={{ width: 70, fontSize: 11, padding: '4px 6px' }}
+          >
+            {[20, 50, 100, 200].map(n => <option key={n} value={n}>{n}/trang</option>)}
+          </select>
         </div>
 
         {/* Table */}
         <div className="tw">
-          <table>
+          <table className="customers-table">
             <thead>
               <tr>
                 {['Mã KH', 'Tên', 'Cửa hàng', 'Hạng', 'Chi tiêu', 'Đơn', 'Mua cuối', 'Tần suất', 'Segment', 'Zalo'].map(h => (
@@ -343,12 +399,15 @@ export function Customers({ dbOn, demoData, canExport, addLog }) {
               </tr>
             </thead>
             <tbody>
-              {filteredCust.map(c => (
+              {paginatedCust.map(c => (
                 <tr
                   key={c.id}
                   className="rh"
                   onClick={() => {
                     setSelCustomer(c);
+                    if (typeof window !== 'undefined') {
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }
                     if (addLog) addLog('view', 'customers', `Xem chi tiết ${c.MaTheKHTT} ${c.name}`);
                   }}
                 >
@@ -378,11 +437,46 @@ export function Customers({ dbOn, demoData, canExport, addLog }) {
             </tbody>
           </table>
         </div>
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+            <button
+              className="btn btn-g btn-sm"
+              disabled={page <= 1}
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+            >
+              <Icon d={ic.chevronLeft} s={14} /> Trước
+            </button>
+            <span style={{ fontSize: 12, color: T.textSec }}>
+              Trang {page} / {totalPages}
+            </span>
+            <button
+              className="btn btn-g btn-sm"
+              disabled={page >= totalPages}
+              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+            >
+              Sau <Icon d={ic.chevronRight} s={14} />
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* Customer Detail Panel */}
+      {/* Customer Detail Modal */}
       {enrichedCustomer && (
-        <div className="card fu" style={{ borderColor: T.accent + '40', overflow: 'hidden' }}>
+        <div className="modal-backdrop" onClick={() => {
+          setSelCustomer(null);
+          setDetailTab('overview');
+          setExpandedOrder(null);
+          setOrderDateFrom('');
+          setOrderDateTo('');
+          setOrderStore('all');
+        }}>
+          <div
+            className="card fu modal-card"
+            style={{ borderColor: T.accent + '40' }}
+            onClick={e => e.stopPropagation()}
+          >
           {/* Customer Header */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16, padding: '0 2px' }}>
             <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
@@ -403,7 +497,7 @@ export function Customers({ dbOn, demoData, canExport, addLog }) {
                 {enrichedCustomer.name.charAt(0)}
               </div>
               <div>
-                <div style={{ fontSize: 20, fontWeight: 800, fontFamily: "'Libre Baskerville',serif" }}>{enrichedCustomer.name}</div>
+                <div style={{ fontSize: 20, fontWeight: 800, fontFamily: "'Be Vietnam Pro',system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" }}>{enrichedCustomer.name}</div>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 2 }}>
                   <span style={{ fontSize: 12, color: T.accent, fontWeight: 600 }}>{enrichedCustomer.MaTheKHTT}</span>
                   <span style={{ width: 3, height: 3, borderRadius: '50%', background: T.textMuted }} />
@@ -528,7 +622,7 @@ export function Customers({ dbOn, demoData, canExport, addLog }) {
                   <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 5 }}>
                     <Icon d={ic.map} s={13} c={T.info} /> Cửa hàng giao dịch
                   </div>
-                  {(selCustomer.transaction_stores || []).map((s, i) => (
+                  {(enrichedCustomer.transaction_stores || []).map((s, i) => (
                     <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0' }}>
                       <Icon d={ic.map} s={11} c={T.textMuted} />
                       <span style={{ fontSize: 12 }}>{s}</span>
@@ -597,12 +691,12 @@ export function Customers({ dbOn, demoData, canExport, addLog }) {
                     {[
                       {
                         label: 'Value Segment',
-                        value: (enrichedCustomer.persona || {}).value_seg || 'Regular',
+                        value: (enrichedCustomer.persona || {}).value_seg,
                         colorMap: { 'Super VIP': T.accent, 'VIP': T.success, 'Regular': T.info, 'Low': T.textMuted }
                       },
                       {
                         label: 'Lifecycle',
-                        value: (enrichedCustomer.persona || {}).lifecycle || 'Active',
+                        value: (enrichedCustomer.persona || {}).lifecycle,
                         colorMap: { 'Loyal': T.success, 'Active': T.info, 'Growing': T.warning, 'Declining': T.danger, 'Churning': T.textMuted }
                       }
                     ].map((d, i) => {
@@ -628,6 +722,79 @@ export function Customers({ dbOn, demoData, canExport, addLog }) {
                   </div>
                 </div>
               </div>
+
+              {/* Persona Dimensions */}
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Icon d={ic.users} s={14} c={T.accent} /> Customer Persona
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 14 }}>
+                {[
+                  {
+                    label: 'Product Persona',
+                    value: ((enrichedCustomer.persona || {}).product_persona || []).join(', '),
+                    icon: ic.package,
+                    color: T.accent
+                  },
+                  {
+                    label: 'Payment Persona',
+                    value: (enrichedCustomer.persona || {}).payment_persona,
+                    icon: ic.dollar,
+                    color: T.info
+                  },
+                  {
+                    label: 'Price Sensitivity',
+                    value: (enrichedCustomer.persona || {}).price_sens,
+                    icon: ic.star,
+                    color: T.warning
+                  },
+                  {
+                    label: 'Shopping Mission',
+                    value: (enrichedCustomer.persona || {}).shop_mission,
+                    icon: ic.cart,
+                    color: T.success
+                  },
+                  {
+                    label: 'Channel',
+                    value: (enrichedCustomer.persona || {}).channel,
+                    icon: ic.msg,
+                    color: T.purple
+                  },
+                  {
+                    label: 'Store',
+                    value: enrichedCustomer.store_primary,
+                    icon: ic.map,
+                    color: T.teal
+                  }
+                ].map((d, i) => (
+                  <div key={i} style={{ padding: 10, borderRadius: 10, background: T.surfaceAlt, border: `1px solid ${T.cardBorder}` }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 5 }}>
+                      <Icon d={d.icon} s={11} c={d.color} />
+                      <span style={{ fontSize: 9, fontWeight: 700, color: d.color, textTransform: 'uppercase' }}>{d.label}</span>
+                    </div>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: T.text }}>{d.value || '—'}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Notes */}
+              {(enrichedCustomer.persona || {}).note && (
+                <div
+                  style={{
+                    padding: '12px 16px',
+                    borderRadius: 10,
+                    background: `linear-gradient(135deg,${T.card} 0%,#1a1828 100%)`,
+                    border: `1px solid ${T.purple}20`
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                    <Icon d={ic.edit} s={12} c={T.purple} />
+                    <span style={{ fontSize: 11, fontWeight: 700, color: T.purple }}>Ghi chú</span>
+                  </div>
+                  <div style={{ fontSize: 12, color: T.textSec, lineHeight: 1.6 }}>
+                    {(enrichedCustomer.persona || {}).note}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -693,8 +860,8 @@ export function Customers({ dbOn, demoData, canExport, addLog }) {
 
                       {/* Expanded: Order items */}
                       {isExp && (
-                        <div style={{ borderTop: `1px solid ${T.cardBorder}`, padding: '12px 14px', background: T.bg + '80' }}>
-                          <div style={{ display: 'grid', gridTemplateColumns: '40px 1fr 90px 50px 70px 90px', gap: 4, marginBottom: 6, padding: '0 4px' }}>
+                        <div style={{ borderTop: `1px solid ${T.cardBorder}`, padding: '12px 14px', background: T.bg + '80', overflowX: 'auto' }}>
+                          <div style={{ display: 'grid', gridTemplateColumns: '80px minmax(0,1.5fr) 80px 40px minmax(0,120px) 90px', gap: 4, marginBottom: 6, padding: '0 4px', minWidth: 640 }}>
                             {['SKU', 'Sản phẩm', 'Đơn giá', 'SL', 'Danh mục', 'Thành tiền'].map(h => (
                               <span key={h} style={{ fontSize: 9, color: T.textMuted, fontWeight: 700, textAlign: h === 'Đơn giá' || h === 'Thành tiền' ? 'right' : h === 'SL' ? 'center' : 'left' }}>
                                 {h}
@@ -702,9 +869,9 @@ export function Customers({ dbOn, demoData, canExport, addLog }) {
                             ))}
                           </div>
                           {o.items.map((it, j) => (
-                            <div key={j} style={{ display: 'grid', gridTemplateColumns: '40px 1fr 90px 50px 70px 90px', gap: 4, padding: '6px 4px', borderRadius: 6, background: j % 2 === 0 ? 'transparent' : T.surfaceAlt + '50', alignItems: 'center' }}>
-                              <span style={{ fontSize: 10, color: T.textMuted }}>{it.sku}</span>
-                              <span style={{ fontSize: 12, fontWeight: 600 }}>{it.name}</span>
+                            <div key={j} style={{ display: 'grid', gridTemplateColumns: '80px minmax(0,1.5fr) 80px 40px minmax(0,120px) 90px', gap: 4, padding: '6px 4px', borderRadius: 6, background: j % 2 === 0 ? 'transparent' : T.surfaceAlt + '50', alignItems: 'center', minWidth: 640 }}>
+                              <span style={{ fontSize: 10, color: T.textMuted, whiteSpace: 'nowrap' }}>{it.sku}</span>
+                              <span style={{ fontSize: 12, fontWeight: 600, minWidth: 0 }}>{it.name}</span>
                               <span style={{ fontSize: 11, color: T.textSec, textAlign: 'right' }}>{formatValue(it.price)}</span>
                               <span style={{ fontSize: 12, fontWeight: 700, color: T.info, textAlign: 'center' }}>{it.qty}</span>
                               <span style={{ fontSize: 10, color: T.textMuted }}>{it.cat}</span>
@@ -725,6 +892,7 @@ export function Customers({ dbOn, demoData, canExport, addLog }) {
               </div>
             </div>
           )}
+          </div>
         </div>
       )}
     </div>

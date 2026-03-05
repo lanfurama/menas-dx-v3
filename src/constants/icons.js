@@ -43,4 +43,6 @@ export const ic = {
   clipboard: "M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2 M8 2h8a1 1 0 011 1v1a1 1 0 01-1 1H8a1 1 0 01-1-1V3a1 1 0 011-1z",
   chevronDown: "M6 9l6 6 6-6",
   chevronUp: "M18 15l-6-6-6 6",
+  chevronLeft: "M15 18l-6-6 6-6",
+  chevronRight: "M9 18l6-6-6-6",
 };
