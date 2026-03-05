@@ -1,0 +1,732 @@
+import { useState, useMemo, useEffect } from 'react';
+import { T, ic, CL } from '../constants/index.js';
+import { useCustomers } from '../hooks/useCustomers.js';
+import { formatValue, formatNumber } from '../utils/format.js';
+import { Icon } from '../components/Icon.jsx';
+import { Tier } from '../components/Tier.jsx';
+import { ExportBtn } from '../components/ExportBtn.jsx';
+import { DEMO } from '../data/demo.js';
+import { dbApi } from '../services/api.js';
+
+// Demo orders data - sẽ được thay thế bằng API
+const DEMO_ORDERS = {
+  "1": [
+    { id: "HD001", date: "2025-05-28", store: "CH Nguyễn Huệ", pay: "Tiền mặt", total: 850000, disc: 0, pts: 85, status: "done", items: [{ sku: "SP001", name: "Premium A", price: 250000, qty: 2, cat: "Thực phẩm", amt: 500000 }, { sku: "SP002", name: "Gold B", price: 350000, qty: 1, cat: "Đồ uống", amt: 350000 }], sub: 850000 }
+  ],
+  "2": [
+    { id: "HD002", date: "2025-05-27", store: "CH Lê Lợi", pay: "Chuyển khoản", total: 520000, disc: 20000, pts: 50, status: "done", items: [{ sku: "SP003", name: "Gold B", price: 350000, qty: 1, cat: "Đồ uống", amt: 350000 }, { sku: "SP004", name: "Snack P", price: 95000, qty: 2, cat: "Snack", amt: 190000 }], sub: 540000 }
+  ],
+};
+
+export function Customers({ dbOn, demoData, canExport, addLog }) {
+  const [searchQ, setSearchQ] = useState('');
+  const [custShowFilter, setCustShowFilter] = useState(false);
+  const [custStore, setCustStore] = useState('all');
+  const [custTier, setCustTier] = useState('all');
+  const [custSegment, setCustSegment] = useState('all');
+  const [custSpendMin, setCustSpendMin] = useState('');
+  const [custSpendMax, setCustSpendMax] = useState('');
+  const [custLastFrom, setCustLastFrom] = useState('');
+  const [custLastTo, setCustLastTo] = useState('');
+  const [custSort, setCustSort] = useState('total_spent_desc');
+  const [selCustomer, setSelCustomer] = useState(null);
+  const [detailTab, setDetailTab] = useState('overview');
+  const [orderDateFrom, setOrderDateFrom] = useState('');
+  const [orderDateTo, setOrderDateTo] = useState('');
+  const [orderStore, setOrderStore] = useState('all');
+  const [expandedOrder, setExpandedOrder] = useState(null);
+  const [customerDetails, setCustomerDetails] = useState(null);
+  const [customerOrders, setCustomerOrders] = useState([]);
+  const [loadingDetails, setLoadingDetails] = useState(false);
+
+  const { data: apiData, loading, error } = useCustomers(dbOn, { limit: 1000, offset: 0 });
+  
+  // Load customer details và orders khi chọn khách hàng
+  useEffect(() => {
+    if (!selCustomer || !dbOn) {
+      setCustomerDetails(null);
+      setCustomerOrders([]);
+      return;
+    }
+    
+    const loadDetails = async () => {
+      setLoadingDetails(true);
+      try {
+        const [details, orders] = await Promise.all([
+          dbApi.getCustomerDetails(selCustomer.MaTheKHTT),
+          dbApi.getCustomerOrders(selCustomer.MaTheKHTT, { limit: 100 })
+        ]);
+        
+        setCustomerDetails(details);
+        setCustomerOrders(orders.data || []);
+      } catch (err) {
+        console.error('Error loading customer details:', err);
+        setCustomerDetails(null);
+        setCustomerOrders([]);
+      } finally {
+        setLoadingDetails(false);
+      }
+    };
+    
+    loadDetails();
+  }, [selCustomer?.MaTheKHTT, dbOn]);
+  
+  const customers = useMemo(() => {
+    if (dbOn && apiData?.data) {
+      return apiData.data.map(c => {
+        // Format date từ TIMESTAMP sang YYYY-MM-DD
+        const formatDate = (ts) => {
+          if (!ts) return '';
+          if (typeof ts === 'string') {
+            return ts.split('T')[0] || ts.split(' ')[0] || ts;
+          }
+          return ts;
+        };
+        
+        // Tính segment dựa trên RFM
+        const totalSpent = Number(c.total_spent || 0);
+        const totalOrders = Number(c.total_orders || 0);
+        const freq = Number(c.frequency_month || 0);
+        const lastPurchase = c.last_purchase ? new Date(c.last_purchase) : null;
+        const daysSince = lastPurchase ? Math.floor((new Date() - lastPurchase) / 864e5) : 999;
+        
+        let segment = 'Regular';
+        if (totalSpent >= 50e6 && freq >= 4 && daysSince <= 30) segment = 'Champions';
+        else if (totalSpent >= 20e6 && freq >= 2 && daysSince <= 60) segment = 'Loyal';
+        else if (totalSpent >= 10e6 && freq >= 1 && daysSince <= 90) segment = 'Potential';
+        else if (daysSince > 120 && daysSince <= 180) segment = 'At Risk';
+        else if (daysSince > 180) segment = 'Hibernating';
+        
+        return {
+          id: c.MaTheKHTT,
+          name: c.name || '',
+          phone: c.phone || '',
+          MaTheKHTT: c.MaTheKHTT || '',
+          loyalty_tier: c.loyalty_tier || 'Silver',
+          loyalty_points: 0, // Không có trong bảng, có thể tính từ total_spent
+          total_spent: totalSpent,
+          total_orders: totalOrders,
+          last_purchase: formatDate(c.last_purchase),
+          first_purchase: formatDate(c.first_purchase),
+          avg_basket: Number(c.avg_basket || 0),
+          frequency_month: freq,
+          top_categories: [], // Sẽ lấy từ transaction table sau
+          top_products: [], // Sẽ lấy từ transaction table sau
+          segment: segment,
+          store_primary: c.store_primary || '',
+          transaction_stores: [], // Sẽ lấy từ transaction table sau
+          has_zalo: false, // Không có trong bảng
+          zalo_oa_follow: false, // Không có trong bảng
+          persona: {}
+        };
+      });
+    }
+    return demoData?.customers || [];
+  }, [dbOn, apiData, demoData]);
+
+  const allStoresList = useMemo(() => [...new Set(customers.map(c => c.store_primary).filter(Boolean))], [customers]);
+  const allTiersList = useMemo(() => [...new Set(customers.map(c => c.loyalty_tier).filter(Boolean))], [customers]);
+  const allSegsList = useMemo(() => [...new Set(customers.map(c => c.segment).filter(Boolean))], [customers]);
+
+  const filteredCust = useMemo(() => {
+    let list = customers;
+    if (searchQ) {
+      const q = searchQ.toLowerCase();
+      list = list.filter(c => 
+        c.name.toLowerCase().includes(q) || 
+        c.MaTheKHTT.toLowerCase().includes(q) || 
+        c.phone.includes(q)
+      );
+    }
+    if (custStore !== 'all') list = list.filter(c => c.store_primary === custStore);
+    if (custTier !== 'all') list = list.filter(c => c.loyalty_tier === custTier);
+    if (custSegment !== 'all') list = list.filter(c => c.segment === custSegment);
+    if (custSpendMin) list = list.filter(c => c.total_spent >= Number(custSpendMin));
+    if (custSpendMax) list = list.filter(c => c.total_spent <= Number(custSpendMax));
+    if (custLastFrom) list = list.filter(c => c.last_purchase >= custLastFrom);
+    if (custLastTo) list = list.filter(c => c.last_purchase <= custLastTo);
+    
+    const s = [...list];
+    switch (custSort) {
+      case 'total_spent_desc': s.sort((a, b) => b.total_spent - a.total_spent); break;
+      case 'total_spent_asc': s.sort((a, b) => a.total_spent - b.total_spent); break;
+      case 'last_purchase_desc': s.sort((a, b) => b.last_purchase.localeCompare(a.last_purchase)); break;
+      case 'last_purchase_asc': s.sort((a, b) => a.last_purchase.localeCompare(b.last_purchase)); break;
+      case 'orders_desc': s.sort((a, b) => b.total_orders - a.total_orders); break;
+      case 'freq_desc': s.sort((a, b) => b.frequency_month - a.frequency_month); break;
+      default: break;
+    }
+    return s;
+  }, [customers, searchQ, custStore, custTier, custSegment, custSpendMin, custSpendMax, custLastFrom, custLastTo, custSort]);
+
+  const resetCustFilter = () => {
+    setCustStore('all');
+    setCustTier('all');
+    setCustSegment('all');
+    setCustSpendMin('');
+    setCustSpendMax('');
+    setCustLastFrom('');
+    setCustLastTo('');
+    setCustSort('total_spent_desc');
+    setSearchQ('');
+  };
+
+  const hasActiveFilter = custStore !== 'all' || custTier !== 'all' || custSegment !== 'all' || custSpendMin || custSpendMax || custLastFrom || custLastTo;
+
+  const selOrders = selCustomer ? (DEMO_ORDERS[selCustomer.id] || []) : [];
+  const filteredOrders = selOrders.filter(o => {
+    if (orderDateFrom && o.date < orderDateFrom) return false;
+    if (orderDateTo && o.date > orderDateTo) return false;
+    if (orderStore !== 'all' && o.store !== orderStore) return false;
+    return true;
+  });
+
+  const selRFM = enrichedCustomer ? (() => {
+    const c = enrichedCustomer;
+    const daysSince = Math.floor((new Date() - new Date(c.last_purchase)) / 864e5);
+    const rScore = daysSince <= 7 ? 5 : daysSince <= 30 ? 4 : daysSince <= 60 ? 3 : daysSince <= 120 ? 2 : 1;
+    const fScore = c.frequency_month >= 4 ? 5 : c.frequency_month >= 2.5 ? 4 : c.frequency_month >= 1.5 ? 3 : c.frequency_month >= 0.8 ? 2 : 1;
+    const mScore = c.total_spent >= 50e6 ? 5 : c.total_spent >= 20e6 ? 4 : c.total_spent >= 10e6 ? 3 : c.total_spent >= 5e6 ? 2 : 1;
+    const total = rScore + fScore + mScore;
+    const label = total >= 13 ? 'Champions' : total >= 10 ? 'Loyal' : total >= 7 ? 'Potential' : total >= 5 ? 'At Risk' : 'Hibernating';
+    const color = total >= 13 ? T.success : total >= 10 ? T.info : total >= 7 ? T.warning : total >= 5 ? T.danger : T.textMuted;
+    return { daysSince, rScore, fScore, mScore, total, label, color };
+  })() : { daysSince: 0, rScore: 0, fScore: 0, mScore: 0, total: 0, label: '—', color: T.textMuted };
+
+  if (dbOn && loading) {
+    return (
+      <div className="fu" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 260 }}>
+        <div className="spin" />
+        <span style={{ marginLeft: 12, color: T.textSec }}>Đang tải dữ liệu từ database...</span>
+      </div>
+    );
+  }
+
+  if (dbOn && error) {
+    return (
+      <div className="fu card" style={{ padding: 24, textAlign: 'center' }}>
+        <div style={{ color: T.danger, marginBottom: 8 }}>Không tải được dữ liệu</div>
+        <div style={{ fontSize: 12, color: T.textSec }}>{error}</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="fu">
+      <div className="card" style={{ marginBottom: 14 }}>
+        {/* Search + Filter Toggle + Export */}
+        <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center' }}>
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px', borderRadius: 8, background: T.surface, border: `1px solid ${T.cardBorder}` }}>
+            <Icon d={ic.search} s={14} c={T.textMuted} />
+            <input
+              className="inp"
+              style={{ border: 'none', background: 'transparent', padding: '8px 0' }}
+              placeholder="Tìm MaTheKHTT, tên, SĐT..."
+              value={searchQ}
+              onChange={e => setSearchQ(e.target.value)}
+            />
+          </div>
+          <button
+            className={`btn btn-sm ${custShowFilter || hasActiveFilter ? 'btn-p' : 'btn-g'}`}
+            onClick={() => setCustShowFilter(!custShowFilter)}
+          >
+            <Icon d={ic.filter} s={12} /> Lọc {hasActiveFilter ? `(${filteredCust.length})` : ''}
+          </button>
+          <ExportBtn
+            canExport={canExport}
+            data={filteredCust.map(c => ({
+              MaTheKHTT: c.MaTheKHTT,
+              Ten: c.name,
+              SoDienThoai: c.phone,
+              HangLoyalty: c.loyalty_tier,
+              TongChiTieu: c.total_spent,
+              SoDonHang: c.total_orders,
+              TanSuat: c.frequency_month,
+              AOV: c.avg_basket,
+              Segment: c.segment,
+              CuaHang: c.store_primary,
+              LanMuaCuoi: c.last_purchase,
+              CoZalo: c.has_zalo ? 'Có' : 'Không'
+            }))}
+            filename={`KH360_${filteredCust.length}kh`}
+          />
+        </div>
+
+        {/* Advanced Filter Panel */}
+        {custShowFilter && (
+          <div style={{ padding: 14, marginBottom: 12, borderRadius: 10, background: T.surfaceAlt, border: `1px solid ${T.cardBorder}` }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: T.accent }}>Bộ lọc nâng cao</span>
+              <button className="btn btn-g btn-sm" onClick={resetCustFilter} style={{ padding: '3px 10px', fontSize: 10 }}>
+                <Icon d={ic.x} s={10} /> Xoá lọc
+              </button>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 10, marginBottom: 10 }}>
+              <div>
+                <span className="label-sm">Cửa hàng giao dịch</span>
+                <select className="inp" value={custStore} onChange={e => setCustStore(e.target.value)}>
+                  <option value="all">Tất cả</option>
+                  {allStoresList.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+              <div>
+                <span className="label-sm">Hạng Loyalty</span>
+                <select className="inp" value={custTier} onChange={e => setCustTier(e.target.value)}>
+                  <option value="all">Tất cả</option>
+                  {allTiersList.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+              <div>
+                <span className="label-sm">Segment</span>
+                <select className="inp" value={custSegment} onChange={e => setCustSegment(e.target.value)}>
+                  <option value="all">Tất cả</option>
+                  {allSegsList.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+              <div>
+                <span className="label-sm">Sắp xếp</span>
+                <select className="inp" value={custSort} onChange={e => setCustSort(e.target.value)}>
+                  <option value="total_spent_desc">Chi tiêu cao - thấp</option>
+                  <option value="total_spent_asc">Chi tiêu thấp - cao</option>
+                  <option value="last_purchase_desc">Mua gần nhất</option>
+                  <option value="last_purchase_asc">Lâu chưa mua</option>
+                  <option value="orders_desc">Nhiều đơn nhất</option>
+                  <option value="freq_desc">Tần suất cao nhất</option>
+                </select>
+              </div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <div>
+                <span className="label-sm">Tổng chi tiêu (VNĐ)</span>
+                <div className="range-row">
+                  <input className="inp" placeholder="Từ" value={custSpendMin} onChange={e => setCustSpendMin(e.target.value)} />
+                  <span style={{ color: T.textMuted }}>—</span>
+                  <input className="inp" placeholder="Đến" value={custSpendMax} onChange={e => setCustSpendMax(e.target.value)} />
+                </div>
+              </div>
+              <div>
+                <span className="label-sm">Lần giao dịch gần nhất</span>
+                <div className="range-row">
+                  <input type="date" className="inp" style={{ fontSize: 12 }} value={custLastFrom} onChange={e => setCustLastFrom(e.target.value)} />
+                  <span style={{ color: T.textMuted }}>—</span>
+                  <input type="date" className="inp" style={{ fontSize: 12 }} value={custLastTo} onChange={e => setCustLastTo(e.target.value)} />
+                </div>
+              </div>
+            </div>
+            {hasActiveFilter && (
+              <div style={{ marginTop: 10, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {custStore !== 'all' && <span className="badge" style={{ background: T.accent + '18', color: T.accent }}>{custStore} <span style={{ cursor: 'pointer', marginLeft: 4 }} onClick={() => setCustStore('all')}>x</span></span>}
+                {custTier !== 'all' && <span className="badge" style={{ background: T.accent + '18', color: T.accent }}>{custTier} <span style={{ cursor: 'pointer', marginLeft: 4 }} onClick={() => setCustTier('all')}>x</span></span>}
+                {custSegment !== 'all' && <span className="badge" style={{ background: T.accent + '18', color: T.accent }}>{custSegment} <span style={{ cursor: 'pointer', marginLeft: 4 }} onClick={() => setCustSegment('all')}>x</span></span>}
+                {custSpendMin && <span className="badge" style={{ background: T.info + '18', color: T.info }}>{`>=${formatValue(+custSpendMin)}`} <span style={{ cursor: 'pointer', marginLeft: 4 }} onClick={() => setCustSpendMin('')}>x</span></span>}
+                {custSpendMax && <span className="badge" style={{ background: T.info + '18', color: T.info }}>{`<=${formatValue(+custSpendMax)}`} <span style={{ cursor: 'pointer', marginLeft: 4 }} onClick={() => setCustSpendMax('')}>x</span></span>}
+                {custLastFrom && <span className="badge" style={{ background: T.success + '18', color: T.success }}>{`Từ ${custLastFrom}`} <span style={{ cursor: 'pointer', marginLeft: 4 }} onClick={() => setCustLastFrom('')}>x</span></span>}
+                {custLastTo && <span className="badge" style={{ background: T.success + '18', color: T.success }}>{`Đến ${custLastTo}`} <span style={{ cursor: 'pointer', marginLeft: 4 }} onClick={() => setCustLastTo('')}>x</span></span>}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Result count */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+          <span style={{ fontSize: 11, color: T.textSec }}>{filteredCust.length} / {customers.length} khách hàng</span>
+        </div>
+
+        {/* Table */}
+        <div className="tw">
+          <table>
+            <thead>
+              <tr>
+                {['Mã KH', 'Tên', 'Cửa hàng', 'Hạng', 'Chi tiêu', 'Đơn', 'Mua cuối', 'Tần suất', 'Segment', 'Zalo'].map(h => (
+                  <th key={h}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {filteredCust.map(c => (
+                <tr
+                  key={c.id}
+                  className="rh"
+                  onClick={() => {
+                    setSelCustomer(c);
+                    if (addLog) addLog('view', 'customers', `Xem chi tiết ${c.MaTheKHTT} ${c.name}`);
+                  }}
+                >
+                  <td style={{ color: T.accent, fontWeight: 600 }}>{c.MaTheKHTT}</td>
+                  <td style={{ fontWeight: 600 }}>{c.name}</td>
+                  <td style={{ fontSize: 11, color: T.textSec }}>{c.store_primary}</td>
+                  <td><Tier t={c.loyalty_tier} /></td>
+                  <td style={{ fontWeight: 700, fontSize: 12 }}>{formatValue(c.total_spent)}</td>
+                  <td>{c.total_orders}</td>
+                  <td style={{ fontSize: 11, color: T.textSec }}>{c.last_purchase}</td>
+                  <td style={{ color: T.info, fontWeight: 600 }}>{c.frequency_month}</td>
+                  <td>
+                    <span
+                      className="badge"
+                      style={{
+                        background: (c.segment === 'Champions' ? T.success : c.segment === 'At Risk' || c.segment === 'Hibernating' ? T.danger : T.info) + '18',
+                        color: c.segment === 'Champions' ? T.success : c.segment === 'At Risk' || c.segment === 'Hibernating' ? T.danger : T.info,
+                        fontSize: 10
+                      }}
+                    >
+                      {c.segment}
+                    </span>
+                  </td>
+                  <td>{c.has_zalo ? <Icon d={ic.check} s={13} c={T.success} /> : <Icon d={ic.x} s={13} c={T.textMuted} />}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Customer Detail Panel */}
+      {enrichedCustomer && (
+        <div className="card fu" style={{ borderColor: T.accent + '40', overflow: 'hidden' }}>
+          {/* Customer Header */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16, padding: '0 2px' }}>
+            <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
+              <div
+                style={{
+                  width: 48,
+                  height: 48,
+                  borderRadius: 12,
+                  background: `linear-gradient(135deg,${T.accent}30,${T.purple}30)`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 18,
+                  fontWeight: 800,
+                  color: T.accent
+                }}
+              >
+                {enrichedCustomer.name.charAt(0)}
+              </div>
+              <div>
+                <div style={{ fontSize: 20, fontWeight: 800, fontFamily: "'Libre Baskerville',serif" }}>{enrichedCustomer.name}</div>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 2 }}>
+                  <span style={{ fontSize: 12, color: T.accent, fontWeight: 600 }}>{enrichedCustomer.MaTheKHTT}</span>
+                  <span style={{ width: 3, height: 3, borderRadius: '50%', background: T.textMuted }} />
+                  <span style={{ fontSize: 12, color: T.textSec }}>{enrichedCustomer.phone}</span>
+                  <span style={{ width: 3, height: 3, borderRadius: '50%', background: T.textMuted }} />
+                  <span style={{ fontSize: 12, color: T.textSec }}>{enrichedCustomer.store_primary}</span>
+                  <Tier t={enrichedCustomer.loyalty_tier} />
+                </div>
+              </div>
+            </div>
+            <button
+              className="btn btn-g btn-sm"
+              onClick={() => {
+                setSelCustomer(null);
+                setDetailTab('overview');
+                setExpandedOrder(null);
+                setOrderDateFrom('');
+                setOrderDateTo('');
+                setOrderStore('all');
+              }}
+            >
+              <Icon d={ic.x} s={12} />
+            </button>
+          </div>
+
+          {/* KPI row */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 8, marginBottom: 16 }}>
+            {[
+              { l: 'Tổng chi', v: formatValue(enrichedCustomer.total_spent), c: T.accent, ic2: ic.dollar },
+              { l: 'Đơn hàng', v: enrichedCustomer.total_orders, c: T.info, ic2: ic.cart },
+              { l: 'Mua cuối', v: enrichedCustomer.last_purchase, c: T.success, ic2: ic.clock },
+              { l: 'Tần suất/T', v: enrichedCustomer.frequency_month, c: T.warning, ic2: ic.repeat },
+              { l: 'AOV', v: formatValue(enrichedCustomer.avg_basket), c: T.purple, ic2: ic.trend },
+              { l: 'Points', v: formatNumber(enrichedCustomer.loyalty_points), c: T.pink, ic2: ic.star }
+            ].map((m, i) => (
+              <div key={i} style={{ padding: '10px 12px', borderRadius: 10, background: m.c + '08', border: `1px solid ${m.c}20` }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
+                  <Icon d={m.ic2} s={10} c={m.c} />
+                  <span style={{ fontSize: 9, fontWeight: 700, color: m.c, textTransform: 'uppercase', letterSpacing: '.04em' }}>{m.l}</span>
+                </div>
+                <div className="counter" style={{ fontSize: 16 }}>{m.v}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Tab switcher */}
+          <div style={{ display: 'flex', gap: 2, marginBottom: 16, borderBottom: `1px solid ${T.cardBorder}` }}>
+            {[
+              { id: 'overview', label: 'Tổng quan', icon: ic.eye },
+              { id: 'persona', label: 'Chân dung KH', icon: ic.users },
+              { id: 'orders', label: `Lịch sử đơn (${selOrders.length})`, icon: ic.cart }
+            ].map(t => (
+              <button
+                key={t.id}
+                onClick={() => {
+                  setDetailTab(t.id);
+                  setExpandedOrder(null);
+                }}
+                style={{
+                  padding: '8px 16px',
+                  fontSize: 12,
+                  fontWeight: detailTab === t.id ? 700 : 500,
+                  color: detailTab === t.id ? T.accent : T.textSec,
+                  background: detailTab === t.id ? T.accent + '10' : 'transparent',
+                  border: 'none',
+                  borderBottom: detailTab === t.id ? `2px solid ${T.accent}` : '2px solid transparent',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  borderRadius: '6px 6px 0 0'
+                }}
+              >
+                <Icon d={t.icon} s={12} c={detailTab === t.id ? T.accent : T.textMuted} />
+                {t.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Tab: Overview */}
+          {detailTab === 'overview' && (
+            <div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14 }}>
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <Icon d={ic.package} s={13} c={T.accent} /> Top danh mục
+                  </div>
+                  {(enrichedCustomer.top_categories || []).map((c, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0' }}>
+                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: CL[i] }} />
+                      <span style={{ fontSize: 12 }}>{c}</span>
+                    </div>
+                  ))}
+                </div>
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <Icon d={ic.star} s={13} c={T.success} /> Top sản phẩm
+                  </div>
+                  {(enrichedCustomer.top_products || []).map((p, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0' }}>
+                      <span
+                        style={{
+                          width: 20,
+                          height: 20,
+                          borderRadius: 5,
+                          background: CL[i] + '15',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: 10,
+                          fontWeight: 800,
+                          color: CL[i]
+                        }}
+                      >
+                        {i + 1}
+                      </span>
+                      <span style={{ fontSize: 12 }}>{p}</span>
+                    </div>
+                  ))}
+                </div>
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <Icon d={ic.map} s={13} c={T.info} /> Cửa hàng giao dịch
+                  </div>
+                  {(selCustomer.transaction_stores || []).map((s, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0' }}>
+                      <Icon d={ic.map} s={11} c={T.textMuted} />
+                      <span style={{ fontSize: 12 }}>{s}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div style={{ marginTop: 14, display: 'flex', gap: 8 }}>
+                <span className="badge" style={{ background: T.success + '18', color: T.success }}>{enrichedCustomer.segment}</span>
+                {enrichedCustomer.has_zalo && (
+                  <span className="badge" style={{ background: T.zaloGreen + '18', color: T.zaloGreen }}>
+                    Zalo {enrichedCustomer.zalo_oa_follow ? '+ Follow OA' : ''}
+                  </span>
+                )}
+                <span className="badge" style={{ background: T.info + '18', color: T.info }}>KH từ {enrichedCustomer.first_purchase}</span>
+              </div>
+            </div>
+          )}
+
+          {/* Tab: Chân dung KH */}
+          {detailTab === 'persona' && enrichedCustomer && (
+            <div>
+              {/* RFM Section */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 18 }}>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Icon d={ic.bar} s={14} c={selRFM.color} /> RFM Analysis
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {[
+                      { label: 'R - Recency', sub: `${selRFM.daysSince} ngày trước`, score: selRFM.rScore, color: T.success },
+                      { label: 'F - Frequency', sub: `${enrichedCustomer.frequency_month}/tháng`, score: selRFM.fScore, color: T.info },
+                      { label: 'M - Monetary', sub: formatValue(enrichedCustomer.total_spent), score: selRFM.mScore, color: T.accent }
+                    ].map((r, i) => (
+                      <div key={i}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                          <div>
+                            <span style={{ fontSize: 12, fontWeight: 700 }}>{r.label}</span>
+                            <span style={{ fontSize: 10, color: T.textMuted, marginLeft: 8 }}>{r.sub}</span>
+                          </div>
+                          <span style={{ fontSize: 14, fontWeight: 800, color: r.color }}>{r.score}/5</span>
+                        </div>
+                        <div style={{ height: 6, borderRadius: 3, background: T.cardBorder, overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: `${(r.score / 5 * 100)}%`, background: r.color, borderRadius: 3 }} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ marginTop: 12, padding: '10px 14px', borderRadius: 10, background: selRFM.color + '10', border: `1px solid ${selRFM.color}30`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div>
+                      <span style={{ fontSize: 11, color: T.textSec }}>RFM Score</span>
+                      <div style={{ fontSize: 22, fontWeight: 800, color: selRFM.color }}>{selRFM.total}/15</div>
+                    </div>
+                    <span className="badge" style={{ background: selRFM.color + '20', color: selRFM.color, fontSize: 13, fontWeight: 700, padding: '6px 14px' }}>
+                      {selRFM.label}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Value & Lifecycle */}
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Icon d={ic.target} s={14} c={T.purple} /> Phân loại giá trị
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 14 }}>
+                    {[
+                      {
+                        label: 'Value Segment',
+                        value: (enrichedCustomer.persona || {}).value_seg || 'Regular',
+                        colorMap: { 'Super VIP': T.accent, 'VIP': T.success, 'Regular': T.info, 'Low': T.textMuted }
+                      },
+                      {
+                        label: 'Lifecycle',
+                        value: (enrichedCustomer.persona || {}).lifecycle || 'Active',
+                        colorMap: { 'Loyal': T.success, 'Active': T.info, 'Growing': T.warning, 'Declining': T.danger, 'Churning': T.textMuted }
+                      }
+                    ].map((d, i) => {
+                      const cl = d.colorMap[d.value] || T.info;
+                      return (
+                        <div key={i} style={{ padding: 10, borderRadius: 10, background: cl + '10', border: `1px solid ${cl}25` }}>
+                          <div style={{ fontSize: 9, fontWeight: 700, color: cl, textTransform: 'uppercase', marginBottom: 3 }}>{d.label}</div>
+                          <div style={{ fontSize: 15, fontWeight: 800, color: cl }}>{d.value || '—'}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                    {[
+                      { label: 'AOV Level', value: (enrichedCustomer.persona || {}).aov_level },
+                      { label: 'Frequency', value: (enrichedCustomer.persona || {}).freq_level }
+                    ].map((d, i) => (
+                      <div key={i} style={{ padding: 8, borderRadius: 8, background: T.surfaceAlt }}>
+                        <div style={{ fontSize: 9, fontWeight: 600, color: T.textMuted, marginBottom: 2 }}>{d.label}</div>
+                        <div style={{ fontSize: 12, fontWeight: 700 }}>{d.value || '—'}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Tab: Orders */}
+          {detailTab === 'orders' && (
+            <div>
+              {/* Order filter bar */}
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 14, flexWrap: 'wrap' }}>
+                <Icon d={ic.calendar} s={13} c={T.textMuted} />
+                <input type="date" className="inp" style={{ maxWidth: 140, fontSize: 11 }} value={orderDateFrom} onChange={e => setOrderDateFrom(e.target.value)} />
+                <span style={{ color: T.textMuted, fontSize: 11 }}>to</span>
+                <input type="date" className="inp" style={{ maxWidth: 140, fontSize: 11 }} value={orderDateTo} onChange={e => setOrderDateTo(e.target.value)} />
+                <select className="inp" style={{ maxWidth: 170, fontSize: 11 }} value={orderStore} onChange={e => setOrderStore(e.target.value)}>
+                  <option value="all">Tất cả cửa hàng</option>
+                  {[...new Set(selOrders.map(o => o.store))].map(s => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
+                {(orderDateFrom || orderDateTo || orderStore !== 'all') && (
+                  <button
+                    className="btn btn-g btn-sm"
+                    style={{ fontSize: 10, padding: '3px 8px' }}
+                    onClick={() => {
+                      setOrderDateFrom('');
+                      setOrderDateTo('');
+                      setOrderStore('all');
+                    }}
+                  >
+                    <Icon d={ic.x} s={10} /> Xoá lọc
+                  </button>
+                )}
+              </div>
+
+              {/* Orders list */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {filteredOrders.length === 0 && (
+                  <div style={{ padding: 20, textAlign: 'center', color: T.textMuted, fontSize: 13 }}>Không có đơn hàng trong khoảng thời gian này</div>
+                )}
+                {filteredOrders.map(o => {
+                  const isExp = expandedOrder === o.id;
+                  const isCx = o.status === 'cancelled';
+                  return (
+                    <div key={o.id} style={{ borderRadius: 10, border: `1px solid ${isExp ? T.accent + '40' : T.cardBorder}`, background: isExp ? T.accent + '05' : T.surface, overflow: 'hidden' }}>
+                      {/* Order row */}
+                      <div onClick={() => setExpandedOrder(isExp ? null : o.id)} style={{ padding: '10px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <div style={{ width: 30, height: 30, borderRadius: 8, background: isCx ? T.danger + '15' : T.success + '15', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          <Icon d={isCx ? ic.x : ic.check} s={13} c={isCx ? T.danger : T.success} />
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{ fontSize: 12, fontWeight: 700, color: T.accent }}>{o.id}</span>
+                            <span style={{ fontSize: 11, color: T.textSec }}>{o.date}</span>
+                            {isCx && <span className="badge" style={{ background: T.danger + '18', color: T.danger, fontSize: 9 }}>Đã huỷ</span>}
+                          </div>
+                          <div style={{ fontSize: 10, color: T.textMuted, marginTop: 2 }}>{o.store} · {o.pay} · {o.items.length} SP</div>
+                        </div>
+                        <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                          <div className="counter" style={{ fontSize: 14, textDecoration: isCx ? 'line-through' : 'none' }}>{formatValue(o.total)}</div>
+                          {o.disc > 0 && <div style={{ fontSize: 10, color: T.success }}>-{formatValue(o.disc)}</div>}
+                        </div>
+                        <Icon d={isExp ? ic.chevronUp : ic.chevronDown} s={14} c={T.textMuted} />
+                      </div>
+
+                      {/* Expanded: Order items */}
+                      {isExp && (
+                        <div style={{ borderTop: `1px solid ${T.cardBorder}`, padding: '12px 14px', background: T.bg + '80' }}>
+                          <div style={{ display: 'grid', gridTemplateColumns: '40px 1fr 90px 50px 70px 90px', gap: 4, marginBottom: 6, padding: '0 4px' }}>
+                            {['SKU', 'Sản phẩm', 'Đơn giá', 'SL', 'Danh mục', 'Thành tiền'].map(h => (
+                              <span key={h} style={{ fontSize: 9, color: T.textMuted, fontWeight: 700, textAlign: h === 'Đơn giá' || h === 'Thành tiền' ? 'right' : h === 'SL' ? 'center' : 'left' }}>
+                                {h}
+                              </span>
+                            ))}
+                          </div>
+                          {o.items.map((it, j) => (
+                            <div key={j} style={{ display: 'grid', gridTemplateColumns: '40px 1fr 90px 50px 70px 90px', gap: 4, padding: '6px 4px', borderRadius: 6, background: j % 2 === 0 ? 'transparent' : T.surfaceAlt + '50', alignItems: 'center' }}>
+                              <span style={{ fontSize: 10, color: T.textMuted }}>{it.sku}</span>
+                              <span style={{ fontSize: 12, fontWeight: 600 }}>{it.name}</span>
+                              <span style={{ fontSize: 11, color: T.textSec, textAlign: 'right' }}>{formatValue(it.price)}</span>
+                              <span style={{ fontSize: 12, fontWeight: 700, color: T.info, textAlign: 'center' }}>{it.qty}</span>
+                              <span style={{ fontSize: 10, color: T.textMuted }}>{it.cat}</span>
+                              <span style={{ fontSize: 12, fontWeight: 700, textAlign: 'right' }}>{formatValue(it.amt)}</span>
+                            </div>
+                          ))}
+                          <div style={{ borderTop: `1px solid ${T.cardBorder}`, marginTop: 8, paddingTop: 8, display: 'flex', justifyContent: 'flex-end', gap: 20 }}>
+                            <span style={{ fontSize: 11, color: T.textSec }}>Tạm tính: <b style={{ color: T.text }}>{formatValue(o.sub)}</b></span>
+                            {o.disc > 0 && <span style={{ fontSize: 11, color: T.success }}>Giảm: <b>-{formatValue(o.disc)}</b></span>}
+                            <span style={{ fontSize: 12, fontWeight: 800, color: T.accent }}>Tổng: {formatValue(o.total)}</span>
+                            <span style={{ fontSize: 11, color: T.purple }}>+{o.pts} pts</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}

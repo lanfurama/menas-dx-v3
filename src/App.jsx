@@ -11,6 +11,8 @@ import { PermEditor } from './components/PermEditor.jsx';
 import { DEMO } from './data/demo.js';
 import { Settings } from './pages/Settings.jsx';
 import { Overview } from './pages/Overview.jsx';
+import { Customers } from './pages/Customers.jsx';
+import { UserManagement } from './pages/UserManagement.jsx';
 import { dbApi } from './services/api.js';
 
 export default function MenasDX() {
@@ -25,28 +27,44 @@ export default function MenasDX() {
   const [dbCfg, setDbCfg] = useState(null);
   const [data] = useState(DEMO);
 
-  useEffect(() => {
-    dbApi.getConfig().then(({ config }) => {
+  // Check database connection health
+  const checkDbHealth = async () => {
+    try {
+      const { config } = await dbApi.getConfig();
       if (config?.is_active) {
-        setDbOn(true);
         setDbCfg(config);
+        // Test actual connection
+        const health = await dbApi.checkHealth();
+        const connected = health.connected === true;
+        setDbOn(connected);
+        return connected;
+      } else {
+        setDbOn(false);
+        setDbCfg(null);
+        return false;
       }
-    }).catch(() => {});
+    } catch (error) {
+      setDbOn(false);
+      return false;
+    }
+  };
+
+  useEffect(() => {
+    checkDbHealth();
+    // Check every 30 seconds
+    const interval = setInterval(checkDbHealth, 30000);
+    return () => clearInterval(interval);
   }, []);
 
   // Khi vào tab Tổng quan, đồng bộ lại config và trigger gọi API overview nếu đã lưu DB
   const [overviewRefetchKey, setOverviewRefetchKey] = useState(0);
   useEffect(() => {
     if (tab !== 'overview') return;
-    dbApi.getConfig()
-      .then(({ config }) => {
-        if (config?.is_active) {
-          setDbOn(true);
-          setDbCfg((c) => c ?? config);
-          setOverviewRefetchKey((k) => k + 1);
-        }
-      })
-      .catch(() => {});
+    checkDbHealth().then((connected) => {
+      if (connected) {
+        setOverviewRefetchKey((k) => k + 1);
+      }
+    });
   }, [tab]);
 
   // Activity Log
@@ -110,6 +128,7 @@ export default function MenasDX() {
       case "overview":
         return ok ? <Overview dbOn={dbOn} demoData={data} canExport={canExport} refetchKey={overviewRefetchKey} /> : <NoAccess />;
       case "customers":
+        return ok ? <Customers dbOn={dbOn} demoData={data} canExport={canExport} addLog={addLog} /> : <NoAccess />;
       case "segment":
       case "sales":
       case "marketing":
@@ -122,38 +141,9 @@ export default function MenasDX() {
       case "activity_log":
         return isAdmin ? <div className="fu">Activity Log - Coming soon</div> : <NoAccess />;
       case "settings":
-        return isAdmin ? <Settings currentUser={auth.currentUser} addLog={addLog} onDbConnect={() => { setDbOn(true); dbApi.getConfig().then(({ config }) => setDbCfg(config || null)); }} /> : <NoAccess />;
+        return isAdmin ? <Settings currentUser={auth.currentUser} addLog={addLog} onDbConnect={checkDbHealth} /> : <NoAccess />;
       case "user_mgmt":
-        return isAdmin ? (
-          <div className="fu">
-            <div className="card">
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
-                <span style={{ fontSize: 14, fontWeight: 700, color: T.text }}>Quản lý người dùng</span>
-              </div>
-              <div className="tw">
-                <table>
-                  <thead>
-                    <tr>
-                      {["Tên", "Email", "Vai trò", "Trạng thái", ""].map(h => <th key={h}>{h}</th>)}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {auth.allUsers.map(u => (
-                      <tr key={u.id} className="rh">
-                        <td style={{ fontWeight: 600 }}>{u.name}</td>
-                        <td>{u.email}</td>
-                        <td><span className="badge" style={{ background: ROLES[u.role]?.color + "18", color: ROLES[u.role]?.color }}>{ROLES[u.role]?.label}</span></td>
-                        <td><span className="badge" style={{ background: u.status === 'active' ? `${T.success}18` : `${T.danger}18`, color: u.status === 'active' ? T.success : T.danger }}>{u.status}</span></td>
-                        <td><button className="btn btn-g btn-sm" onClick={() => auth.setEditingUser(u.id === auth.editingUser ? null : u.id)}><Icon d={ic.edit} s={11} /></button></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-            {auth.editingUser && <PermEditor uid={auth.editingUser} users={auth.allUsers} setUsers={auth.setAllUsers} close={() => auth.setEditingUser(null)} />}
-          </div>
-        ) : <NoAccess />;
+        return isAdmin ? <UserManagement auth={auth} /> : <NoAccess />;
       default:
         return <div className="fu">Page not found</div>;
     }

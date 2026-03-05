@@ -1,6 +1,10 @@
 import express from 'express';
 import { configPool, createExternalPool } from '../db/pool.js';
 import pg from 'pg';
+import * as overviewQueries from '../queries/overview.js';
+import * as customerQueries from '../queries/customer.js';
+import * as transactionQueries from '../queries/transaction.js';
+import * as locationQueries from '../queries/location.js';
 
 const router = express.Router();
 
@@ -24,6 +28,32 @@ router.get('/config', async (req, res) => {
       ? 'Không thể kết nối đến database. Vui lòng kiểm tra cấu hình trong file .env'
       : error.message;
     res.status(500).json({ error: errorMessage });
+  }
+});
+
+// Check health of active external database connection
+router.get('/health', async (req, res) => {
+  try {
+    const result = await configPool.query(
+      'SELECT * FROM db_config WHERE is_active = true LIMIT 1'
+    );
+    if (result.rows.length === 0) {
+      return res.json({ connected: false, error: 'No active database configuration' });
+    }
+    
+    const config = result.rows[0];
+    const externalPool = createExternalPool(config);
+    
+    try {
+      await externalPool.query('SELECT NOW()');
+      await externalPool.end();
+      res.json({ connected: true });
+    } catch (error) {
+      await externalPool.end().catch(() => {});
+      res.json({ connected: false, error: error.message });
+    }
+  } catch (error) {
+    res.json({ connected: false, error: error.message });
   }
 });
 
@@ -289,19 +319,11 @@ const getActiveExternalPool = async () => {
 // Query datamart_customer table (no id column: use MaTheKHTT)
 router.get('/datamart/customer', async (req, res) => {
   try {
-    const { limit = 100, offset = 0 } = req.query;
+    const { limit = 1000, offset = 0, search = '' } = req.query;
     const externalPool = await getActiveExternalPool();
     
-    const result = await externalPool.query(
-      `SELECT * FROM public.datamart_customer 
-       ORDER BY "MaTheKHTT" NULLS LAST, "NgayHD" DESC NULLS LAST 
-       LIMIT $1 OFFSET $2`,
-      [parseInt(limit), parseInt(offset)]
-    );
-    
-    const countResult = await externalPool.query(
-      'SELECT COUNT(*) FROM public.datamart_customer'
-    );
+    const result = await externalPool.query(customerQueries.getCustomers(limit, offset, search));
+    const countResult = await externalPool.query(customerQueries.countCustomers(search));
     
     res.json({
       data: result.rows,
@@ -315,31 +337,112 @@ router.get('/datamart/customer', async (req, res) => {
   }
 });
 
-// Query datamart_transaction table (no id column: use NgayGioQuet, MaHD)
+// Query datamart_transaction table - group by MaHD (hóa đơn) để lấy danh sách đơn hàng
 router.get('/datamart/transaction', async (req, res) => {
   try {
-    const { limit = 100, offset = 0 } = req.query;
+    const { limit = 100, offset = 0, customerId } = req.query;
     const externalPool = await getActiveExternalPool();
     
-    const result = await externalPool.query(
-      `SELECT * FROM public.datamart_transaction 
-       ORDER BY "NgayGioQuet" DESC NULLS LAST, "MaHD" NULLS LAST 
-       LIMIT $1 OFFSET $2`,
-      [parseInt(limit), parseInt(offset)]
-    );
+    let whereClause = '';
+    const params = [];
     
-    const countResult = await externalPool.query(
-      'SELECT COUNT(*) FROM public.datamart_transaction'
-    );
+    if (customerId) {
+      whereClause = `WHERE t."MaTheKHTT" = $1`;
+      params.push(customerId);
+    }
+    
+    // Group by MaHD để tạo danh sách đơn hàng
+    const query = `
+      SELECT 
+        t."MaHD" AS "id",
+        MAX(t."NgayGioQuet")::date AS "date",
+        MAX(t."store_name") AS "store",
+        MAX(t."MaTheKHTT") AS "customerId",
+        COUNT(*) AS "item_count",
+        SUM(t."ThanhTienBan") AS "total",
+        SUM(t."TienGiamGia") AS "disc",
+        SUM(t."ThanhTienBan") - COALESCE(SUM(t."TienGiamGia"), 0) AS "final_total",
+        'done' AS "status",
+        -- Lấy danh sách items dưới dạng JSON
+        json_agg(
+          json_build_object(
+            'sku', t."MaHH",
+            'name', t."TenHH",
+            'price', t."DGBan",
+            'qty', t."SoLuong",
+            'cat', t."category_name",
+            'amt', t."ThanhTienBan"
+          )
+        ) AS "items"
+      FROM public.datamart_transaction t
+      ${whereClause}
+      GROUP BY t."MaHD"
+      ORDER BY MAX(t."NgayGioQuet") DESC NULLS LAST
+      LIMIT $${params.length + 1} OFFSET $${params.length + 2}
+    `;
+    
+    params.push(parseInt(limit), parseInt(offset));
+    const result = await externalPool.query(query, params);
+    
+    // Format lại items và tính toán
+    const formattedData = result.rows.map(row => ({
+      id: row.id || row.MaHD,
+      date: row.date ? new Date(row.date).toISOString().split('T')[0] : '',
+      store: row.store || '',
+      pay: 'Tiền mặt', // Không có trong bảng, mặc định
+      total: Number(row.final_total || row.total || 0),
+      disc: Number(row.disc || 0),
+      sub: Number(row.total || 0),
+      pts: Math.round(Number(row.final_total || 0) / 10000),
+      status: row.status || 'done',
+      items: (row.items || []).map(item => ({
+        sku: item.sku || '',
+        name: item.name || '',
+        price: Number(item.price || 0),
+        qty: Number(item.qty || 0),
+        cat: item.cat || '',
+        amt: Number(item.amt || 0)
+      }))
+    }));
+    
+    let countQuery = `
+      SELECT COUNT(DISTINCT "MaHD") 
+      FROM public.datamart_transaction
+      ${whereClause}
+    `;
+    const countResult = await externalPool.query(countQuery, customerId ? [customerId] : []);
     
     res.json({
-      data: result.rows,
+      data: formattedData,
       total: parseInt(countResult.rows[0].count),
       limit: parseInt(limit),
       offset: parseInt(offset)
     });
   } catch (error) {
     console.error('Error querying datamart_transaction:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Lấy thông tin chi tiết khách hàng (top categories, products, stores)
+router.get('/datamart/customer/:customerId/details', async (req, res) => {
+  try {
+    const { customerId } = req.params;
+    const externalPool = await getActiveExternalPool();
+    
+    const [categories, products, stores] = await Promise.all([
+      externalPool.query(customerQueries.getCustomerCategories(customerId)),
+      externalPool.query(customerQueries.getCustomerProducts(customerId)),
+      externalPool.query(customerQueries.getCustomerStores(customerId))
+    ]);
+    
+    res.json({
+      categories: categories.rows.map(r => r.name),
+      products: products.rows.map(r => r.name),
+      stores: stores.rows.map(r => r.store_name)
+    });
+  } catch (error) {
+    console.error('Error getting customer details:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -358,11 +461,8 @@ router.get('/datamart/location', async (req, res) => {
       return res.json({ data: [], total: 0, limit: parseInt(limit), offset: parseInt(offset) });
     }
     
-    const result = await externalPool.query(
-      `SELECT * FROM public.datamart_localtion LIMIT $1 OFFSET $2`,
-      [parseInt(limit), parseInt(offset)]
-    );
-    const countResult = await externalPool.query('SELECT COUNT(*) FROM public.datamart_localtion');
+    const result = await externalPool.query(locationQueries.getLocations(limit, offset));
+    const countResult = await externalPool.query(locationQueries.countLocations());
     
     res.json({
       data: result.rows,
@@ -381,68 +481,43 @@ router.get('/datamart/location', async (req, res) => {
 router.get('/datamart/overview', async (req, res) => {
   try {
     const externalPool = await getActiveExternalPool();
-    const [custStats, revStats, revByMonth, topStores, topCats, segs] = await Promise.all([
-      externalPool.query(`
-        SELECT 
-          COUNT(DISTINCT "MaTheKHTT") AS total_customers,
-          COUNT(DISTINCT CASE WHEN COALESCE("status",'') = 'active' OR COALESCE("status",'') = '' THEN "MaTheKHTT" END) AS active_customers,
-          COUNT(*) AS rows_count
-        FROM public.datamart_customer
-      `),
-      externalPool.query(`
-        SELECT 
-          COALESCE(SUM("ThanhTienBan"), 0) AS total_revenue,
-          COUNT(DISTINCT "MaHD") AS total_orders,
-          COUNT(*) AS rows_count
-        FROM public.datamart_transaction
-      `),
-      externalPool.query(`
-        SELECT 
-          TO_CHAR("NgayGioQuet"::date, 'TMM') AS month,
-          EXTRACT(MONTH FROM "NgayGioQuet") AS m,
-          COALESCE(SUM("ThanhTienBan"), 0) AS revenue,
-          COUNT(DISTINCT "MaHD") AS orders
-        FROM public.datamart_transaction
-        WHERE "NgayGioQuet" IS NOT NULL
-        GROUP BY TO_CHAR("NgayGioQuet"::date, 'TMM'), EXTRACT(MONTH FROM "NgayGioQuet")
-        ORDER BY m
-      `),
-      externalPool.query(`
-        SELECT 
-          COALESCE("store_name", 'N/A') AS store_name,
-          COALESCE(SUM("ThanhTienBan"), 0) AS revenue,
-          COUNT(DISTINCT "MaHD") AS orders
-        FROM public.datamart_transaction
-        GROUP BY "store_name"
-        ORDER BY revenue DESC
-        LIMIT 10
-      `),
-      externalPool.query(`
-        SELECT 
-          COALESCE("category_name", 'N/A') AS name,
-          COALESCE(SUM("ThanhTienBan"), 0) AS revenue,
-          COUNT(DISTINCT "MaHD") AS orders
-        FROM public.datamart_transaction
-        GROUP BY "category_name"
-        ORDER BY revenue DESC
-        LIMIT 10
-      `),
-      externalPool.query(`
-        SELECT 
-          COALESCE("loyalty_tier", 'N/A') AS name,
-          COUNT(DISTINCT "MaTheKHTT") AS value
-        FROM public.datamart_customer
-        GROUP BY "loyalty_tier"
-        ORDER BY value DESC
-        LIMIT 10
-      `)
+    const [custStats, revStats, revByMonth, topStores, topCats, segs, activeFromTx] = await Promise.all([
+      externalPool.query(overviewQueries.getCustomerStats()),
+      externalPool.query(overviewQueries.getRevenueStats()),
+      externalPool.query(overviewQueries.getRevenueByMonth()),
+      externalPool.query(overviewQueries.getTopStores()),
+      externalPool.query(overviewQueries.getTopCategories()),
+      externalPool.query(overviewQueries.getSegmentation()),
+      externalPool.query(overviewQueries.getActiveCustomersFromTransactions())
     ]);
     
     const c = custStats.rows[0] || {};
     const r = revStats.rows[0] || {};
     const totalRev = Number(r.total_revenue) || 0;
     const totalOrd = parseInt(r.total_orders) || 0;
-    const aov = totalOrd > 0 ? Math.round(totalRev / totalOrd) : 0;
+    
+    // Fallback: if transaction table is empty, try to get revenue/orders from customer table
+    let finalRev = totalRev;
+    let finalOrd = totalOrd;
+    if (totalRev === 0 && totalOrd === 0 && parseInt(r.rows_count) === 0) {
+      const custRevResult = await externalPool.query(overviewQueries.getCustomerRevenueFallback());
+      if (custRevResult.rows[0]) {
+        finalRev = Number(custRevResult.rows[0].total_revenue) || 0;
+        finalOrd = parseInt(custRevResult.rows[0].total_orders) || 0;
+      }
+    }
+    
+    const aov = finalOrd > 0 ? Math.round(finalRev / finalOrd) : 0;
+    
+    // Use active customers from transactions if status-based count is 0 but we have transaction data
+    let activeCustomers = parseInt(c.active_customers) || 0;
+    if (activeCustomers === 0 && (finalOrd > 0 || parseInt(activeFromTx.rows[0]?.active_count) > 0)) {
+      activeCustomers = parseInt(activeFromTx.rows[0]?.active_count) || 0;
+    }
+    // If still 0, use total customers as fallback (assume all are active if no status tracking)
+    if (activeCustomers === 0 && parseInt(c.total_customers) > 0) {
+      activeCustomers = parseInt(c.total_customers) || 0;
+    }
     
     const colors = ['#e0e0e0', '#c8965a', '#5bb8f5', '#8888a0', '#ef5350', '#a78bfa', '#2dd4bf', '#f0c040', '#f472b6', '#6366f1'];
     const segmentation = (segs.rows || []).map((s, i) => ({
@@ -454,11 +529,11 @@ router.get('/datamart/overview', async (req, res) => {
     res.json({
       overview: {
         total_customers: parseInt(c.total_customers) || 0,
-        active_customers: parseInt(c.active_customers) || 0,
+        active_customers: activeCustomers,
         new_this_month: null,
         avg_order_value: aov,
-        total_revenue: totalRev,
-        total_orders: totalOrd
+        total_revenue: finalRev,
+        total_orders: finalOrd
       },
       revenueByMonth: (revByMonth.rows || []).map(row => ({
         month: row.month || 'T' + row.m,

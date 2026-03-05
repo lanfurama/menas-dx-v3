@@ -42,6 +42,7 @@ export const dbApi = {
     method: 'POST',
     body: JSON.stringify(config),
   }),
+  checkHealth: () => request('/db/health'),
   getCustomers: (params = {}) => {
     const query = new URLSearchParams(params).toString();
     return request(`/db/datamart/customer${query ? `?${query}` : ''}`);
@@ -50,6 +51,11 @@ export const dbApi = {
     const query = new URLSearchParams(params).toString();
     return request(`/db/datamart/transaction${query ? `?${query}` : ''}`);
   },
+  getCustomerOrders: (customerId, params = {}) => {
+    const query = new URLSearchParams({ customerId, ...params }).toString();
+    return request(`/db/datamart/transaction?${query}`);
+  },
+  getCustomerDetails: (customerId) => request(`/db/datamart/customer/${customerId}/details`),
   getLocations: (params = {}) => {
     const query = new URLSearchParams(params).toString();
     return request(`/db/datamart/location${query ? `?${query}` : ''}`);
