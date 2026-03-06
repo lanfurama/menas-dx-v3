@@ -13,6 +13,8 @@ import { Settings } from './pages/Settings.jsx';
 import { Overview } from './pages/Overview.jsx';
 import { Customers } from './pages/Customers.jsx';
 import { Segment } from './pages/Segment.jsx';
+import { Sales } from './pages/Sales.jsx';
+import { Marketing } from './pages/Marketing.jsx';
 import { UserManagement } from './pages/UserManagement.jsx';
 import { dbApi } from './services/api.js';
 
@@ -158,7 +160,9 @@ export default function MenasDX() {
       case "segment":
         return ok ? <Segment dbOn={dbOn} demoData={data} canExport={canExport} addLog={addLog} /> : <NoAccess />;
       case "sales":
+        return ok ? <Sales dbOn={dbOn} demoData={data} canExport={canExport} /> : <NoAccess />;
       case "marketing":
+        return ok ? <Marketing dbOn={dbOn} demoData={data} canExport={canExport} /> : <NoAccess />;
       case "zalo":
       case "predictions":
       case "ai_chat":

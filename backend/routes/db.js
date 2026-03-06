@@ -2,6 +2,7 @@ import express from 'express';
 import { configPool, createExternalPool } from '../db/pool.js';
 import pg from 'pg';
 import * as overviewQueries from '../queries/overview.js';
+import * as salesQueries from '../queries/sales.js';
 import * as customerQueries from '../queries/customer.js';
 import * as transactionQueries from '../queries/transaction.js';
 import * as locationQueries from '../queries/location.js';
@@ -739,20 +740,20 @@ router.get('/datamart/location', async (req, res) => {
 router.get('/datamart/overview', async (req, res) => {
   try {
     const externalPool = await getActiveExternalPool();
-    const [custStats, revStats, revByMonth, topStores, topCats, segs, activeFromTx] = await Promise.all([
+    const [custStats, revStats, revByMonth, topStores, topCats, segs] = await Promise.all([
       externalPool.query(overviewQueries.getCustomerStats()),
       externalPool.query(overviewQueries.getRevenueStats()),
       externalPool.query(overviewQueries.getRevenueByMonth()),
       externalPool.query(overviewQueries.getTopStores()),
       externalPool.query(overviewQueries.getTopCategories()),
-      externalPool.query(overviewQueries.getSegmentation()),
-      externalPool.query(overviewQueries.getActiveCustomersFromTransactions())
+      externalPool.query(overviewQueries.getSegmentation())
     ]);
     
     const c = custStats.rows[0] || {};
     const r = revStats.rows[0] || {};
     const totalRev = Number(r.total_revenue) || 0;
     const totalOrd = parseInt(r.total_orders) || 0;
+    const activeFromTx = parseInt(r.active_count) || 0;
     
     // Fallback: if transaction table is empty, try to get revenue/orders from customer table
     let finalRev = totalRev;
@@ -769,8 +770,8 @@ router.get('/datamart/overview', async (req, res) => {
     
     // Use active customers from transactions if status-based count is 0 but we have transaction data
     let activeCustomers = parseInt(c.active_customers) || 0;
-    if (activeCustomers === 0 && (finalOrd > 0 || parseInt(activeFromTx.rows[0]?.active_count) > 0)) {
-      activeCustomers = parseInt(activeFromTx.rows[0]?.active_count) || 0;
+    if (activeCustomers === 0 && (finalOrd > 0 || activeFromTx > 0)) {
+      activeCustomers = activeFromTx;
     }
     // If still 0, use total customers as fallback (assume all are active if no status tracking)
     if (activeCustomers === 0 && parseInt(c.total_customers) > 0) {
@@ -814,6 +815,53 @@ router.get('/datamart/overview', async (req, res) => {
     console.error('Error querying datamart overview:', error);
     res.status(500).json({ error: error.message });
   }
+});
+
+// Sales: catPerf, payments (nếu có cột PTTT), hourly
+router.get('/datamart/sales', async (req, res) => {
+  try {
+    const externalPool = await getActiveExternalPool();
+    const [catPerfResult, hourlyResult] = await Promise.all([
+      externalPool.query(salesQueries.getTopCategories()),
+      externalPool.query(salesQueries.getOrdersByHour())
+    ]);
+    let paymentsRows = [];
+    try {
+      const payResult = await externalPool.query(salesQueries.getPaymentsByMethod());
+      paymentsRows = payResult.rows || [];
+    } catch (_) {
+      // Cột PhuongThucThanhToan có thể không tồn tại
+    }
+    const hourlyMap = new Map((hourlyResult.rows || []).map(r => [r.h, parseInt(r.orders) || 0]));
+    const hourly = Array.from({ length: 24 }, (_, i) => ({
+      hour: `${i}h`,
+      orders: hourlyMap.get(i) ?? 0
+    }));
+    res.json({
+      catPerf: (catPerfResult.rows || []).map(c => ({
+        name: c.name || 'N/A',
+        revenue: Number(c.revenue) || 0,
+        orders: parseInt(c.orders) || 0
+      })),
+      payments: paymentsRows.map(p => ({
+        method: p.method || 'Khác',
+        amount: Number(p.amount) || 0,
+        count: parseInt(p.count) || 0
+      })),
+      hourly
+    });
+  } catch (error) {
+    console.error('Error querying datamart sales:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Marketing: campaigns (chưa có bảng nguồn – trả về rỗng; frontend dùng demo)
+router.get('/datamart/marketing', (_req, res) => {
+  res.json({
+    metrics: { campaigns: 0, reach: '0', ctr: '0%' },
+    campaigns: []
+  });
 });
 
 export { router as dbRouter };

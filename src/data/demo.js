@@ -96,6 +96,13 @@ export const DEMO = {
     { id: "7", name: "Đặng Văn Giang", phone: "0967890123", MaTheKHTT: "KH007", loyalty_tier: "Silver", loyalty_points: 3200, total_spent: 5200000, total_orders: 15, last_purchase: "2025-03-10", first_purchase: "2024-01-15", avg_basket: 346666, frequency_month: 1.0, top_categories: ["Đồ uống"], top_products: ["Gold B"], sentiment: "At Risk", segment: "Hibernating", store_primary: "CH Lê Lợi", transaction_stores: ["CH Lê Lợi"], last_txn_amount: 180000, has_zalo: true, zalo_oa_follow: false },
     { id: "8", name: "Ngô Thị Lan", phone: "0978901234", MaTheKHTT: "KH008", loyalty_tier: "Gold", loyalty_points: 16800, total_spent: 19500000, total_orders: 58, last_purchase: "2025-05-22", first_purchase: "2023-02-14", avg_basket: 336206, frequency_month: 2.1, top_categories: ["Thực phẩm", "Đông lạnh"], top_products: ["Premium A"], sentiment: "Positive", segment: "Loyal", store_primary: "CH Phạm Ngọc Thạch", transaction_stores: ["CH Phạm Ngọc Thạch", "CH Nguyễn Huệ"], last_txn_amount: 450000, has_zalo: true, zalo_oa_follow: true },
   ],
+  marketingMetrics: { campaigns: 12, reach: "485K", ctr: "3.8%" },
+  campaigns: [
+    { name: "Flash Sale T12", status: "Active", objective: "Sales", spend: "45M", reach: "120K", ctr: "4.2%" },
+    { name: "Loyalty Q4", status: "Active", objective: "Retention", spend: "32M", reach: "85K", ctr: "3.5%" },
+    { name: "VIP Exclusive", status: "Active", objective: "Upsell", spend: "18M", reach: "15K", ctr: "8.1%" },
+    { name: "Win-back", status: "Active", objective: "Retention", spend: "12M", reach: "25K", ctr: "2.8%" }
+  ],
   znsTemplates: [
     { id: "t1", name: "Chào mừng KH mới", type: "transaction", status: "approved", params: ["customer_name", "store_name"] },
     { id: "t2", name: "Sinh nhật KH", type: "promotion", status: "approved", params: ["customer_name", "voucher_code"] },

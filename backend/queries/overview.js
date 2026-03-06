@@ -16,6 +16,7 @@ export const getRevenueStats = () => `
   SELECT 
     COALESCE(SUM("ThanhTienBan"), 0) AS total_revenue,
     COUNT(DISTINCT "MaHD") AS total_orders,
+    COUNT(DISTINCT "MaTheKHTT") AS active_count,
     COUNT(*) AS rows_count
   FROM public.datamart_transaction
 `;
@@ -62,12 +63,6 @@ export const getSegmentation = () => `
   GROUP BY "loyalty_tier"
   ORDER BY value DESC
   LIMIT 10
-`;
-
-export const getActiveCustomersFromTransactions = () => `
-  SELECT COUNT(DISTINCT "MaTheKHTT") AS active_count
-  FROM public.datamart_transaction
-  WHERE "MaTheKHTT" IS NOT NULL
 `;
 
 export const getCustomerRevenueFallback = () => `

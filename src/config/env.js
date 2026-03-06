@@ -19,7 +19,7 @@ export const env = {
   // App
   app: {
     env: import.meta.env.MODE || 'development',
-    port: import.meta.env.VITE_PORT || 5173,
+    port: import.meta.env.VITE_PORT || 3006,
     apiUrl: import.meta.env.VITE_API_URL || 'http://localhost:3000/api',
   },
 };
