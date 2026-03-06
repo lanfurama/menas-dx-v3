@@ -15,6 +15,9 @@ import { Customers } from './pages/Customers.jsx';
 import { Segment } from './pages/Segment.jsx';
 import { Sales } from './pages/Sales.jsx';
 import { Marketing } from './pages/Marketing.jsx';
+import { Zalo } from './pages/Zalo.jsx';
+import { Datamap } from './pages/Datamap.jsx';
+import { ActivityLog } from './pages/ActivityLog.jsx';
 import { UserManagement } from './pages/UserManagement.jsx';
 import { dbApi } from './services/api.js';
 
@@ -164,13 +167,14 @@ export default function MenasDX() {
       case "marketing":
         return ok ? <Marketing dbOn={dbOn} demoData={data} canExport={canExport} /> : <NoAccess />;
       case "zalo":
+        return ok ? <Zalo dbOn={dbOn} demoData={data} canExport={canExport} /> : <NoAccess />;
       case "predictions":
       case "ai_chat":
       case "report":
       case "datamap":
-        return ok ? <div className="fu">Page {tab} - Coming soon</div> : <NoAccess />;
+        return ok ? <Datamap /> : <NoAccess />;
       case "activity_log":
-        return isAdmin ? <div className="fu">Activity Log - Coming soon</div> : <NoAccess />;
+        return isAdmin ? <ActivityLog activityLog={activityLog} canExport={canExport} /> : <NoAccess />;
       case "settings":
         return isAdmin ? <Settings currentUser={auth.currentUser} addLog={addLog} onDbConnect={checkDbHealth} /> : <NoAccess />;
       case "user_mgmt":
