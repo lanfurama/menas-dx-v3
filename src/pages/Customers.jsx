@@ -7,6 +7,7 @@ import { Tier } from '../components/Tier.jsx';
 import { ExportBtn } from '../components/ExportBtn.jsx';
 import { DEMO } from '../data/demo.js';
 import { dbApi } from '../services/api.js';
+import { useBreakpoint } from '../hooks/useBreakpoint.js';
 
 // Demo orders data - sẽ được thay thế bằng API
 const DEMO_ORDERS = {
@@ -41,6 +42,7 @@ export function Customers({ dbOn, demoData, canExport, addLog }) {
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
+  const isMobile = useBreakpoint(768);
 
   const { data: apiData, loading, error } = useCustomers(dbOn, { limit: 1000, offset: 0 });
   
@@ -260,8 +262,8 @@ export function Customers({ dbOn, demoData, canExport, addLog }) {
     <div className="fu">
       <div className="card" style={{ marginBottom: 14 }}>
         {/* Search + Filter Toggle + Export */}
-        <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center' }}>
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px', borderRadius: 8, background: T.surface, border: `1px solid ${T.cardBorder}` }}>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div style={{ flex: 1, minWidth: isMobile ? '100%' : 0, display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px', borderRadius: 8, background: T.surface, border: `1px solid ${T.cardBorder}` }}>
             <Icon d={ic.search} s={14} c={T.textMuted} />
             <input
               className="inp"
@@ -306,7 +308,7 @@ export function Customers({ dbOn, demoData, canExport, addLog }) {
                 <Icon d={ic.x} s={10} /> Xoá lọc
               </button>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 10, marginBottom: 10 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr 1fr', gap: 10, marginBottom: 10 }}>
               <div>
                 <span className="label-sm">Cửa hàng giao dịch</span>
                 <select className="inp" value={custStore} onChange={e => setCustStore(e.target.value)}>
@@ -340,7 +342,7 @@ export function Customers({ dbOn, demoData, canExport, addLog }) {
                 </select>
               </div>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 10 }}>
               <div>
                 <span className="label-sm">Tổng chi tiêu (VNĐ)</span>
                 <div className="range-row">
@@ -390,7 +392,7 @@ export function Customers({ dbOn, demoData, canExport, addLog }) {
 
         {/* Table */}
         <div className="tw">
-          <table className="customers-table">
+          <table className="customers-table" style={{ minWidth: isMobile ? 720 : 0 }}>
             <thead>
               <tr>
                 {['Mã KH', 'Tên', 'Cửa hàng', 'Hạng', 'Chi tiêu', 'Đơn', 'Mua cuối', 'Tần suất', 'Segment', 'Zalo'].map(h => (
@@ -478,7 +480,7 @@ export function Customers({ dbOn, demoData, canExport, addLog }) {
             onClick={e => e.stopPropagation()}
           >
           {/* Customer Header */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16, padding: '0 2px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16, padding: '0 2px', flexWrap: isMobile ? 'wrap' : 'nowrap', gap: isMobile ? 10 : 0 }}>
             <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
               <div
                 style={{
@@ -524,7 +526,7 @@ export function Customers({ dbOn, demoData, canExport, addLog }) {
           </div>
 
           {/* KPI row */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 8, marginBottom: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(6, 1fr)', gap: 8, marginBottom: 16 }}>
             {[
               { l: 'Tổng chi', v: formatValue(enrichedCustomer.total_spent), c: T.accent, ic2: ic.dollar },
               { l: 'Đơn hàng', v: enrichedCustomer.total_orders, c: T.info, ic2: ic.cart },
@@ -646,7 +648,7 @@ export function Customers({ dbOn, demoData, canExport, addLog }) {
           {detailTab === 'persona' && enrichedCustomer && (
             <div>
               {/* RFM Section */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 18 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16, marginBottom: 18 }}>
                 <div>
                   <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
                     <Icon d={ic.bar} s={14} c={selRFM.color} /> RFM Analysis
@@ -727,7 +729,7 @@ export function Customers({ dbOn, demoData, canExport, addLog }) {
               <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
                 <Icon d={ic.users} s={14} c={T.accent} /> Customer Persona
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 14 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: 10, marginBottom: 14 }}>
                 {[
                   {
                     label: 'Product Persona',

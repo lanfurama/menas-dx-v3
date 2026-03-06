@@ -5,6 +5,7 @@ import { Metric } from '../components/Metric.jsx';
 import { ExportBtn } from '../components/ExportBtn.jsx';
 import { useMarketing } from '../hooks/useMarketing.js';
 import { transformMarketingData } from '../utils/marketingData.js';
+import { useBreakpoint } from '../hooks/useBreakpoint.js';
 
 export function Marketing({ dbOn, demoData, canExport }) {
   const { data: apiData, loading, error } = useMarketing(dbOn);
@@ -12,6 +13,7 @@ export function Marketing({ dbOn, demoData, canExport }) {
     () => transformMarketingData(dbOn, apiData, error, demoData),
     [dbOn, apiData, error, demoData]
   );
+  const isMobile = useBreakpoint(768);
 
   if (loading && dbOn) {
     return (
@@ -24,7 +26,7 @@ export function Marketing({ dbOn, demoData, canExport }) {
 
   return (
     <div className="fu">
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 14 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: 12, marginBottom: 14 }}>
         <Metric icon={ic.target} label="Campaigns" value={metrics.campaigns} idx={1} />
         <Metric icon={ic.users} label="Reach" value={metrics.reach} idx={2} />
         <Metric icon={ic.trend} label="CTR" value={metrics.ctr} idx={3} />

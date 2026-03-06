@@ -10,6 +10,7 @@ import { TopStoresList } from './overview/components/TopStoresList.jsx';
 import { DataSourceInfo } from './overview/components/DataSourceInfo.jsx';
 import { Icon } from '../components/Icon.jsx';
 import { Toggle } from '../components/Toggle.jsx';
+import { useBreakpoint } from '../hooks/useBreakpoint.js';
 
 export function Overview({ dbOn, demoData, canExport, refetchKey }) {
   const { data: apiData, loading, error } = useOverview(dbOn, refetchKey);
@@ -20,6 +21,7 @@ export function Overview({ dbOn, demoData, canExport, refetchKey }) {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const isMobile = useBreakpoint(768);
 
   const dash = useMemo(() => transformOverviewData(dbOn, apiData, error, demoData), [dbOn, apiData, error, demoData]);
   
@@ -221,14 +223,14 @@ export function Overview({ dbOn, demoData, canExport, refetchKey }) {
 
       <MetricsGrid overview={dash.overview} totalRev={totalRev} totalOrders={totalOrders} />
 
-      <div style={{ display: 'grid', gridTemplateColumns: '5fr 3fr', gap: 12, marginBottom: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '5fr 3fr', gap: 12, marginBottom: 16 }}>
         <RevenueChart data={filteredRevenue} dbOn={dbOn} showYoY={showYoY} chartXKey={chartXKey} />
         <SegmentationChart data={dash.segmentation} dbOn={dbOn} />
       </div>
 
       <CategoryChart data={dash.catPerf} dbOn={dbOn} canExport={canExport} />
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 12 }}>
         <TopStoresList data={dash.topStores} dbOn={dbOn} canExport={canExport} />
         <DataSourceInfo dbOn={dbOn} />
       </div>

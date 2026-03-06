@@ -9,6 +9,7 @@ import { ExportBtn } from '../components/ExportBtn.jsx';
 import { useSales } from '../hooks/useSales.js';
 import { transformSalesData } from '../utils/salesData.js';
 import { formatValue } from '../utils/format.js';
+import { useBreakpoint } from '../hooks/useBreakpoint.js';
 
 const tt = tooltipStyle;
 
@@ -18,6 +19,7 @@ export function Sales({ dbOn, demoData, canExport }) {
     () => transformSalesData(dbOn, apiData, error, demoData),
     [dbOn, apiData, error, demoData]
   );
+  const isMobile = useBreakpoint(768);
 
   if (loading && dbOn) {
     return (
@@ -30,7 +32,7 @@ export function Sales({ dbOn, demoData, canExport }) {
 
   return (
     <div className="fu">
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 12, marginBottom: 14 }}>
         <div className="card">
           <Section icon={ic.bar} title="Doanh thu danh mục" sql={!!dbOn}>
             <ExportBtn
