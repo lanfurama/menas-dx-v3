@@ -252,6 +252,7 @@ export function Sales({ dbOn, demoData, canExport }) {
           </ResponsiveContainer>
         </div>
 
+        {(payments.length > 0 || !dbOn) && (
         <div className="card">
           <Section icon={ic.gift} title="Thanh toán" sql={!!dbOn} />
           <ResponsiveContainer width="100%" height={170}>
@@ -290,6 +291,7 @@ export function Sales({ dbOn, demoData, canExport }) {
             ))}
           </div>
         </div>
+        )}
       </div>
 
       <div className="card">
