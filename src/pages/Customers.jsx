@@ -17,6 +17,26 @@ const DEMO_ORDERS = {
   "2": [
     { id: "HD002", date: "2025-05-27", store: "CH Lê Lợi", pay: "Chuyển khoản", total: 520000, disc: 20000, pts: 50, status: "done", items: [{ sku: "SP003", name: "Gold B", price: 350000, qty: 1, cat: "Đồ uống", amt: 350000 }, { sku: "SP004", name: "Snack P", price: 95000, qty: 2, cat: "Snack", amt: 190000 }], sub: 540000 }
   ],
+  "3": [
+    { id: "HD003a", date: "2025-05-20", store: "CH Phạm Ngọc Thạch", pay: "Tiền mặt", total: 380000, disc: 0, pts: 38, status: "done", items: [{ sku: "SP001", name: "Premium A", price: 250000, qty: 1, cat: "Thực phẩm", amt: 250000 }, { sku: "SP002", name: "Gold B", price: 130000, qty: 1, cat: "Đồ uống", amt: 130000 }], sub: 380000 }
+  ],
+  "4": [
+    { id: "HD004a", date: "2025-05-25", store: "CH Hai Bà Trưng", pay: "Thẻ", total: 620000, disc: 30000, pts: 59, status: "done", items: [{ sku: "SP002", name: "Gold B", price: 350000, qty: 1, cat: "Đồ uống", amt: 350000 }, { sku: "SP005", name: "Đông lạnh X", price: 300000, qty: 1, cat: "Đông lạnh", amt: 300000 }], sub: 650000 }
+  ],
+  "5": [
+    { id: "HD005a", date: "2025-04-15", store: "CH Cách Mạng T8", pay: "Tiền mặt", total: 290000, disc: 0, pts: 29, status: "done", items: [{ sku: "SP006", name: "Gia vị ĐB", price: 150000, qty: 1, cat: "Gia vị", amt: 150000 }, { sku: "SP004", name: "Snack P", price: 140000, qty: 1, cat: "Snack", amt: 140000 }], sub: 290000 }
+  ],
+  "6": [
+    { id: "HD006a", date: "2025-05-29", store: "CH Nguyễn Huệ", pay: "Thẻ", total: 1200000, disc: 50000, pts: 115, status: "done", items: [{ sku: "SP001", name: "Premium A", price: 250000, qty: 2, cat: "Thực phẩm", amt: 500000 }, { sku: "SP002", name: "Gold B", price: 350000, qty: 1, cat: "Đồ uống", amt: 350000 }, { sku: "SP004", name: "Snack P", price: 450000, qty: 1, cat: "Snack", amt: 450000 }], sub: 1300000 },
+    { id: "HD006b", date: "2025-05-22", store: "CH Lê Lợi", pay: "Chuyển khoản", total: 780000, disc: 0, pts: 78, status: "done", items: [{ sku: "SP001", name: "Premium A", price: 250000, qty: 1, cat: "Thực phẩm", amt: 250000 }, { sku: "SP002", name: "Gold B", price: 350000, qty: 1, cat: "Đồ uống", amt: 350000 }, { sku: "SP006", name: "Gia vị ĐB", price: 180000, qty: 1, cat: "Gia vị", amt: 180000 }], sub: 780000 },
+    { id: "HD006c", date: "2025-05-15", store: "CH Phạm Ngọc Thạch", pay: "Tiền mặt", total: 520000, disc: 0, pts: 52, status: "done", items: [{ sku: "SP002", name: "Gold B", price: 350000, qty: 1, cat: "Đồ uống", amt: 350000 }, { sku: "SP004", name: "Snack P", price: 170000, qty: 1, cat: "Snack", amt: 170000 }], sub: 520000 }
+  ],
+  "7": [
+    { id: "HD007a", date: "2025-03-10", store: "CH Lê Lợi", pay: "Tiền mặt", total: 180000, disc: 0, pts: 18, status: "done", items: [{ sku: "SP002", name: "Gold B", price: 180000, qty: 1, cat: "Đồ uống", amt: 180000 }], sub: 180000 }
+  ],
+  "8": [
+    { id: "HD008a", date: "2025-05-22", store: "CH Phạm Ngọc Thạch", pay: "Thẻ", total: 450000, disc: 0, pts: 45, status: "done", items: [{ sku: "SP001", name: "Premium A", price: 250000, qty: 1, cat: "Thực phẩm", amt: 250000 }, { sku: "SP005", name: "Đông lạnh X", price: 200000, qty: 1, cat: "Đông lạnh", amt: 200000 }], sub: 450000 }
+  ],
 };
 
 export function Customers({ dbOn, demoData, canExport, addLog }) {
@@ -46,6 +66,14 @@ export function Customers({ dbOn, demoData, canExport, addLog }) {
 
   const { data: apiData, loading, error } = useCustomers(dbOn, { limit: 1000, offset: 0 });
   
+  useEffect(() => {
+    if (selCustomer) {
+      setOrderDateFrom('');
+      setOrderDateTo('');
+      setOrderStore('all');
+    }
+  }, [selCustomer?.MaTheKHTT, selCustomer?.id]);
+
   // Load customer details và orders khi chọn khách hàng
   useEffect(() => {
     if (!selCustomer || !dbOn) {
@@ -58,15 +86,10 @@ export function Customers({ dbOn, demoData, canExport, addLog }) {
     const loadDetails = async () => {
       setLoadingDetails(true);
       try {
-        const [details, orders, personaRes] = await Promise.all([
-          dbApi.getCustomerDetails(selCustomer.MaTheKHTT),
-          dbApi.getCustomerOrders(selCustomer.MaTheKHTT, { limit: 100 }),
-          dbApi.getCustomerPersona(selCustomer.MaTheKHTT),
-        ]);
-        
-        setCustomerDetails(details);
-        setCustomerOrders(orders.data || []);
-        setCustomerPersona(personaRes.persona || null);
+        const res = await dbApi.getCustomerModal(selCustomer.MaTheKHTT);
+        setCustomerDetails(res.details || {});
+        setCustomerOrders(res.orders?.data || []);
+        setCustomerPersona(res.persona?.persona ?? null);
       } catch (err) {
         console.error('Error loading customer details:', err);
         setCustomerDetails(null);
@@ -201,12 +224,21 @@ export function Customers({ dbOn, demoData, canExport, addLog }) {
   const selOrders = dbOn
     ? (customerOrders || [])
     : (selCustomer ? (DEMO_ORDERS[selCustomer.id] || []) : []);
-  const filteredOrders = selOrders.filter(o => {
-    if (orderDateFrom && o.date < orderDateFrom) return false;
-    if (orderDateTo && o.date > orderDateTo) return false;
-    if (orderStore !== 'all' && o.store !== orderStore) return false;
-    return true;
-  });
+  const filteredOrders = useMemo(() => {
+    return selOrders.filter(o => {
+      if (orderDateFrom && o.date < orderDateFrom) return false;
+      if (orderDateTo && o.date > orderDateTo) return false;
+      if (orderStore !== 'all' && (o.store || '').trim() !== orderStore) return false;
+      return true;
+    }).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  }, [selOrders, orderDateFrom, orderDateTo, orderStore]);
+
+  const orderStoresList = useMemo(() => {
+    const stores = [...new Set(selOrders.map(o => (o.store || '').trim()).filter(Boolean))];
+    return stores.sort((a, b) => a.localeCompare(b));
+  }, [selOrders]);
+
+  const hasOrderFilter = orderDateFrom || orderDateTo || orderStore !== 'all';
 
   const enrichedCustomer = selCustomer
     ? (() => {
@@ -579,7 +611,14 @@ export function Customers({ dbOn, demoData, canExport, addLog }) {
             ))}
           </div>
 
-          {/* Tab: Overview */}
+          {/* Tab content: loading state hoặc nội dung tab */}
+          {loadingDetails ? (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 160, gap: 12 }}>
+              <div className="spin" />
+              <span style={{ color: T.textSec, fontSize: 13 }}>Đang tải dữ liệu...</span>
+            </div>
+          ) : (
+            <>
           {detailTab === 'overview' && (
             <div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14 }}>
@@ -805,20 +844,23 @@ export function Customers({ dbOn, demoData, canExport, addLog }) {
             <div>
               {/* Order filter bar */}
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 14, flexWrap: 'wrap' }}>
-                <Icon d={ic.calendar} s={13} c={T.textMuted} />
+                <Icon d={ic.filter} s={13} c={T.textMuted} />
                 <input type="date" className="inp" style={{ maxWidth: 140, fontSize: 11 }} value={orderDateFrom} onChange={e => setOrderDateFrom(e.target.value)} />
-                <span style={{ color: T.textMuted, fontSize: 11 }}>to</span>
+                <span style={{ color: T.textMuted, fontSize: 11 }}>đến</span>
                 <input type="date" className="inp" style={{ maxWidth: 140, fontSize: 11 }} value={orderDateTo} onChange={e => setOrderDateTo(e.target.value)} />
-                <select className="inp" style={{ maxWidth: 170, fontSize: 11 }} value={orderStore} onChange={e => setOrderStore(e.target.value)}>
+                <select className="inp" style={{ maxWidth: 200, fontSize: 11 }} value={orderStore} onChange={e => setOrderStore(e.target.value)}>
                   <option value="all">Tất cả cửa hàng</option>
-                  {[...new Set(selOrders.map(o => o.store))].map(s => (
+                  {orderStoresList.map(s => (
                     <option key={s} value={s}>{s}</option>
                   ))}
                 </select>
-                {(orderDateFrom || orderDateTo || orderStore !== 'all') && (
+                <span style={{ fontSize: 11, color: T.textMuted }}>
+                  {filteredOrders.length}/{selOrders.length} đơn
+                </span>
+                {hasOrderFilter && (
                   <button
                     className="btn btn-g btn-sm"
-                    style={{ fontSize: 10, padding: '3px 8px' }}
+                    style={{ fontSize: 10, padding: '4px 10px' }}
                     onClick={() => {
                       setOrderDateFrom('');
                       setOrderDateTo('');
@@ -833,7 +875,13 @@ export function Customers({ dbOn, demoData, canExport, addLog }) {
               {/* Orders list */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {filteredOrders.length === 0 && (
-                  <div style={{ padding: 20, textAlign: 'center', color: T.textMuted, fontSize: 13 }}>Không có đơn hàng trong khoảng thời gian này</div>
+                  <div style={{ padding: 24, textAlign: 'center', color: T.textMuted, fontSize: 13 }}>
+                    {selOrders.length === 0
+                      ? 'Không có đơn hàng'
+                      : hasOrderFilter
+                        ? 'Không có đơn hàng phù hợp với bộ lọc. Thử đổi khoảng ngày hoặc cửa hàng.'
+                        : 'Không có đơn hàng'}
+                  </div>
                 )}
                 {filteredOrders.map(o => {
                   const isExp = expandedOrder === o.id;
@@ -893,6 +941,8 @@ export function Customers({ dbOn, demoData, canExport, addLog }) {
                 })}
               </div>
             </div>
+          )}
+            </>
           )}
           </div>
         </div>

@@ -37,5 +37,7 @@ export const tooltipStyle = {
     color: T.text,
     fontSize: 12,
     fontFamily: "'Outfit',sans-serif"
-  }
+  },
+  labelStyle: { color: T.text },
+  itemStyle: { color: T.text }
 };

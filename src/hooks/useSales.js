@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { dbApi } from '../services/api.js';
 
-export function useSales(dbOn, refetchKey = 0) {
+export function useSales(dbOn, params = {}, refetchKey = 0) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -15,7 +15,7 @@ export function useSales(dbOn, refetchKey = 0) {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    dbApi.getSales()
+    dbApi.getSales(params)
       .then((res) => {
         if (!cancelled) {
           setData(res);
@@ -32,7 +32,7 @@ export function useSales(dbOn, refetchKey = 0) {
         if (!cancelled) setLoading(false);
       });
     return () => { cancelled = true; };
-  }, [dbOn, refetchKey]);
+  }, [dbOn, refetchKey, JSON.stringify(params)]);
 
   return { data, loading, error };
 }

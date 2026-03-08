@@ -56,12 +56,16 @@ export const dbApi = {
     return request(`/db/datamart/transaction?${query}`);
   },
   getCustomerDetails: (customerId) => request(`/db/datamart/customer/${customerId}/details`),
+  getCustomerModal: (customerId) => request(`/db/datamart/customer/${customerId}/modal`),
   getLocations: (params = {}) => {
     const query = new URLSearchParams(params).toString();
     return request(`/db/datamart/location${query ? `?${query}` : ''}`);
   },
   getOverview: () => request('/db/datamart/overview'),
-  getSales: () => request('/db/datamart/sales'),
+  getSales: (params = {}) => {
+    const q = new URLSearchParams(params).toString();
+    return request(`/db/datamart/sales${q ? `?${q}` : ''}`);
+  },
   getMarketing: () => request('/db/datamart/marketing'),
   getCustomerPersona: (customerId) => request(`/db/datamart/customer/${customerId}/persona`),
 };

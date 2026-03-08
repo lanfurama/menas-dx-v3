@@ -70,11 +70,11 @@ export const DEMO = {
     { segment: "Hibernating", count: 1285, avg_recency: 200, avg_frequency: 1, avg_monetary: 2000000 }
   ],
   catPerf: [
-    { name: "Thực phẩm", revenue: 3200000000, orders: 8500 },
-    { name: "Đồ uống", revenue: 2400000000, orders: 6200 },
-    { name: "Gia vị", revenue: 1800000000, orders: 4800 },
-    { name: "Snack", revenue: 1500000000, orders: 3900 },
-    { name: "Đông lạnh", revenue: 1200000000, orders: 3100 }
+    { name: "Thực phẩm", revenue: 3200000000, discount: 128000000, orders: 8500 },
+    { name: "Đồ uống", revenue: 2400000000, discount: 96000000, orders: 6200 },
+    { name: "Gia vị", revenue: 1800000000, discount: 72000000, orders: 4800 },
+    { name: "Snack", revenue: 1500000000, discount: 60000000, orders: 3900 },
+    { name: "Đông lạnh", revenue: 1200000000, discount: 48000000, orders: 3100 }
   ],
   payments: [
     { method: "Tiền mặt", amount: 35e9, count: 15200 },
