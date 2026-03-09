@@ -40,16 +40,19 @@ export const AiConfig = memo(({
           </div>
           
           <div style={{ marginBottom: 8 }}>
-            <span className="label-sm">API Key ({currentModel.provider})</span>
+            <span className="label-sm">API Key ({currentModel.provider.toUpperCase()})</span>
             <input
               className="inp"
-              type="password"
-              placeholder="sk-..."
+              type={apiKey && apiKey.includes('***') ? 'text' : 'password'}
+              placeholder={apiKey && apiKey.includes('***') ? apiKey : 'sk-...'}
               value={apiKey}
               onChange={e => setApiKey(e.target.value)}
+              style={apiKey && apiKey.includes('***') ? { fontFamily: 'monospace', color: T.textSec } : {}}
             />
             <div style={{ fontSize: 11, color: T.textMuted, marginTop: 4 }}>
-              Để trống nếu không muốn thay đổi API key hiện tại
+              {apiKey && apiKey.includes('***') 
+                ? 'API key đã được lưu. Nhập key mới để thay đổi.'
+                : 'Để trống nếu không muốn thay đổi API key hiện tại'}
             </div>
           </div>
           

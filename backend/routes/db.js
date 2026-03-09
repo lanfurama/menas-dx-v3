@@ -1031,4 +1031,49 @@ router.get('/datamart/marketing', (_req, res) => {
   });
 });
 
+// Predictions: forecast data (tạm thời trả về demo data, sẽ tích hợp ML model sau)
+router.get('/datamart/predictions', async (req, res) => {
+  try {
+    const { period = '1m' } = req.query;
+    const periodMap = { '1m': 1, '3m': 3, '6m': 6, '12m': 12 };
+    const months = periodMap[period] || 1;
+
+    // Tạm thời trả về demo data
+    // TODO: Tích hợp ML model để tính toán dự báo thực tế từ historical data
+    const monthsArr = ["T6", "T7", "T8", "T9", "T10", "T11", "T12", "T1", "T2", "T3", "T4", "T5"];
+    const baseRevs = [7.8, 8.1, 7.5, 8.3, 8.8, 9.5, 10.2, 12.5, 7.2, 8.0, 8.4, 8.9];
+    const forecast = [];
+
+    for (let i = 0; i < Math.min(months, 12); i++) {
+      const rev = baseRevs[i % 12] * (0.95 + Math.random() * 0.1);
+      forecast.push({
+        month: monthsArr[i % 12],
+        revenue: rev * 1e9,
+        prevRevenue: baseRevs[i % 12] * 0.88 * 1e9,
+        orders: Math.round(rev * 380 + Math.random() * 200),
+        newCustomers: Math.round(420 + Math.random() * 180),
+        churnRisk: Math.round(280 + Math.random() * 80),
+      });
+    }
+
+    const totalRevenue = forecast.reduce((s, f) => s + f.revenue, 0);
+    const totalOrders = forecast.reduce((s, f) => s + f.orders, 0);
+    const totalNewCustomers = forecast.reduce((s, f) => s + f.newCustomers, 0);
+    const totalChurnRisk = forecast.reduce((s, f) => s + f.churnRisk, 0);
+
+    res.json({
+      forecast,
+      totalRevenue,
+      totalOrders,
+      totalNewCustomers,
+      totalChurnRisk,
+      events: [],
+      insights: [],
+    });
+  } catch (error) {
+    console.error('Error querying predictions:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export { router as dbRouter };

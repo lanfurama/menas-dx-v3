@@ -1,11 +1,11 @@
 import { useCallback } from 'react';
-import { T } from '../constants/index.js';
+import { T, AI_MODELS } from '../constants/index.js';
 import { useDbConfig } from '../hooks/useDbConfig.js';
 import { useAiConfig } from '../hooks/useAiConfig.js';
 import { DbConfig } from './settings/components/DbConfig.jsx';
 import { AiConfig } from './settings/components/AiConfig.jsx';
 
-export const Settings = ({ currentUser, addLog, onDbConnect }) => {
+export const Settings = ({ currentUser, addLog, onDbConnect, onAiConnect }) => {
   const {
     dbCfg,
     setDbCfg,
@@ -36,11 +36,26 @@ export const Settings = ({ currentUser, addLog, onDbConnect }) => {
 
   const handleSaveAi = useCallback(async () => {
     try {
-      await handleSaveAiHook();
-      addLog('save', 'settings', `Cập nhật AI config: ${selectedModel}`);
-      alert('Đã lưu cấu hình AI');
+      const result = await handleSaveAiHook();
+      if (result) {
+        const modelName = AI_MODELS.find(m => m.id === selectedModel)?.name || selectedModel;
+        if (addLog) {
+          addLog('save', 'settings', `Cập nhật AI config: ${modelName}`);
+        }
+        // Trigger AI status check
+        if (onAiConnect) {
+          onAiConnect();
+        }
+        // Use setTimeout to ensure alert shows after state updates
+        setTimeout(() => {
+          alert('Đã lưu cấu hình AI vào database');
+        }, 100);
+      }
     } catch (error) {
-      alert('Lưu thất bại: ' + (error.message || 'Unknown error'));
+      console.error('Error saving AI config:', error);
+      setTimeout(() => {
+        alert('Lưu thất bại: ' + (error.message || 'Unknown error'));
+      }, 100);
     }
   }, [handleSaveAiHook, addLog, selectedModel]);
 

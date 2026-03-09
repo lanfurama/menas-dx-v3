@@ -68,11 +68,16 @@ export const dbApi = {
   },
   getMarketing: () => request('/db/datamart/marketing'),
   getCustomerPersona: (customerId) => request(`/db/datamart/customer/${customerId}/persona`),
+  getPredictions: (params = {}) => {
+    const q = new URLSearchParams(params).toString();
+    return request(`/db/datamart/predictions${q ? `?${q}` : ''}`);
+  },
 };
 
 export const aiApi = {
   getConfigs: () => request('/ai/configs'),
   getConfig: () => request('/ai/config'),
+  getConfigByModel: (modelId) => request(`/ai/config/model/${modelId}`),
   updateConfig: (modelId, updates) => request(`/ai/config/${modelId}`, {
     method: 'PUT',
     body: JSON.stringify(updates),

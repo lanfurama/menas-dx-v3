@@ -4,6 +4,7 @@ import { T, ic, ALL_TABS, ROLES, tabToPath, pathToTab } from './constants/index.
 import { globalCSS } from './styles/global.js';
 import { useAuth } from './hooks/useAuth.js';
 import { usePermissions } from './hooks/usePermissions.js';
+import { useAiStatus } from './hooks/useAiStatus.js';
 import { Icon } from './components/Icon.jsx';
 import { Dot } from './components/Dot.jsx';
 import { NoAccess } from './components/NoAccess.jsx';
@@ -16,6 +17,7 @@ import { Segment } from './pages/Segment.jsx';
 import { Sales } from './pages/Sales.jsx';
 import { Marketing } from './pages/Marketing.jsx';
 import { Zalo } from './pages/Zalo.jsx';
+import { Predictions } from './pages/Predictions.jsx';
 import { Datamap } from './pages/Datamap.jsx';
 import { ActivityLog } from './pages/ActivityLog.jsx';
 import { UserManagement } from './pages/UserManagement.jsx';
@@ -27,6 +29,7 @@ export default function MenasDX() {
   const navigate = useNavigate();
   const tab = pathToTab(location.pathname);
   const { canView, canExport, isAdmin, visibleTabs } = usePermissions(auth.currentUser, ALL_TABS);
+  const { aiOn, checkAiStatus } = useAiStatus();
 
   // App State
   const [dbOn, setDbOn] = useState(false);
@@ -169,6 +172,7 @@ export default function MenasDX() {
       case "zalo":
         return ok ? <Zalo dbOn={dbOn} demoData={data} canExport={canExport} /> : <NoAccess />;
       case "predictions":
+        return ok ? <Predictions dbOn={dbOn} demoData={data} canExport={canExport} addLog={addLog} /> : <NoAccess />;
       case "ai_chat":
       case "report":
       case "datamap":
@@ -176,7 +180,7 @@ export default function MenasDX() {
       case "activity_log":
         return isAdmin ? <ActivityLog activityLog={activityLog} canExport={canExport} /> : <NoAccess />;
       case "settings":
-        return isAdmin ? <Settings currentUser={auth.currentUser} addLog={addLog} onDbConnect={checkDbHealth} /> : <NoAccess />;
+        return isAdmin ? <Settings currentUser={auth.currentUser} addLog={addLog} onDbConnect={checkDbHealth} onAiConnect={checkAiStatus} /> : <NoAccess />;
       case "user_mgmt":
         return isAdmin ? <UserManagement auth={auth} /> : <NoAccess />;
       default:
@@ -217,8 +221,25 @@ export default function MenasDX() {
             <Icon d={ic.sparkle} s={13} />
             {theme === 'dark' ? 'Dark' : 'Light'}
           </button>
-          {/* DB status sẽ được update từ Settings page */}
+          {/* DB status */}
           <Dot on={dbOn} />
+          {/* AI status */}
+          <span 
+            className="badge" 
+            style={{ 
+              background: aiOn ? `${T.purple}18` : `${T.textMuted}18`, 
+              color: aiOn ? T.purple : T.textMuted,
+              fontSize: 10,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 4,
+              padding: "2px 8px"
+            }}
+            title={aiOn ? "AI đã được cấu hình" : "AI chưa được cấu hình"}
+          >
+            <Icon d={ic.brain} s={9} c={aiOn ? T.purple : T.textMuted} />
+            AI
+          </span>
           <div style={{ width: 1, height: 20, background: T.cardBorder, margin: "0 4px" }} />
           <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 10px", borderRadius: 8, background: T.surfaceAlt, cursor: "pointer" }} onClick={() => navigate(tabToPath('user_mgmt'))}>
             <div style={{ width: 24, height: 24, borderRadius: "50%", background: `${ROLES[auth.currentUser?.role]?.color || T.info}30`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 800, color: ROLES[auth.currentUser?.role]?.color || T.info }}>{auth.currentUser?.avatar}</div>
