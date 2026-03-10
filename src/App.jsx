@@ -127,8 +127,8 @@ export default function MenasDX() {
         <style>{globalCSS}</style>
         <div className="card" style={{ maxWidth: 400, width: "100%" }}>
           <div style={{ textAlign: "center", marginBottom: 24 }}>
-            <div style={{ width: 64, height: 64, borderRadius: 16, background: T.grad, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
-              <Icon d={ic.layers} s={32} c={T.bg} />
+            <div style={{ width: 64, height: 64, borderRadius: 16, overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
+              <img src="/png/logo.png" alt="MENAS DX" style={{ width: 64, height: 64, objectFit: "cover" }} />
             </div>
             <div style={{ fontSize: 24, fontWeight: 800, fontFamily: "'Be Vietnam Pro',system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif", letterSpacing: "-.02em" }}>
               <span style={{ color: T.accent }}>MENAS</span> <span style={{ color: T.text }}>DX</span>
@@ -202,8 +202,8 @@ export default function MenasDX() {
       {/* HEADER */}
       <header style={{ padding: "10px 22px", borderBottom: `1px solid ${T.cardBorder}`, display: "flex", alignItems: "center", justifyContent: "space-between", background: T.surface }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ width: 32, height: 32, borderRadius: 8, background: T.grad, display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <Icon d={ic.layers} s={15} c={T.bg} />
+          <div style={{ width: 32, height: 32, borderRadius: 8, overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <img src="/png/logo.png" alt="MENAS DX" style={{ width: 32, height: 32, objectFit: "cover" }} />
           </div>
           <div>
             <div style={{ fontSize: 16, fontWeight: 800, fontFamily: "'Be Vietnam Pro',system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif", letterSpacing: "-.02em" }}>
@@ -238,7 +238,7 @@ export default function MenasDX() {
             title={aiOn ? "AI đã được cấu hình" : "AI chưa được cấu hình"}
           >
             <Icon d={ic.brain} s={9} c={aiOn ? T.purple : T.textMuted} />
-            AI
+            AI: {aiOn ? 'connected' : 'disconnected'}
           </span>
           <div style={{ width: 1, height: 20, background: T.cardBorder, margin: "0 4px" }} />
           <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 10px", borderRadius: 8, background: T.surfaceAlt, cursor: "pointer" }} onClick={() => navigate(tabToPath('user_mgmt'))}>

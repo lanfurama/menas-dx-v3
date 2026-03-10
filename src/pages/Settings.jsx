@@ -26,8 +26,11 @@ export const Settings = ({ currentUser, addLog, onDbConnect, onAiConnect }) => {
     setApiEndpoint,
     aiLoading,
     aiSaving,
+    aiTesting,
+    aiTestError,
     currentModel,
-    handleSaveAi: handleSaveAiHook
+    handleSaveAi: handleSaveAiHook,
+    handleTestAi: handleTestAiHook
   } = useAiConfig();
 
   const handleSaveDb = useCallback(async () => {
@@ -80,8 +83,11 @@ export const Settings = ({ currentUser, addLog, onDbConnect, onAiConnect }) => {
         setApiEndpoint={setApiEndpoint}
         aiLoading={aiLoading}
         aiSaving={aiSaving}
+        aiTesting={aiTesting}
+        aiTestError={aiTestError}
         currentModel={currentModel}
         handleSaveAi={handleSaveAi}
+        handleTestAi={handleTestAiHook}
       />
     </div>
   );

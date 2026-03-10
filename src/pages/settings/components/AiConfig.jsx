@@ -12,8 +12,11 @@ export const AiConfig = memo(({
   setApiEndpoint, 
   aiLoading, 
   aiSaving, 
+  aiTesting,
+  aiTestError,
   currentModel, 
-  handleSaveAi 
+  handleSaveAi,
+  handleTestAi
 }) => {
   return (
     <div className="card" style={{ marginBottom: 14, border: `1px solid ${T.purple}30` }}>
@@ -73,21 +76,47 @@ export const AiConfig = memo(({
             AI Chat sẽ sử dụng model được chọn.
           </div>
           
-          <button
-            className="btn btn-p"
-            onClick={handleSaveAi}
-            disabled={aiSaving}
-          >
-            {aiSaving ? (
-              <>
-                <div className="spin" style={{ width: 14, height: 14 }} /> Đang lưu...
-              </>
-            ) : (
-              <>
-                <Icon d={ic.check} s={13} /> Lưu cấu hình AI
-              </>
-            )}
-          </button>
+          {aiTestError && (
+            <div style={{ fontSize: 12, color: T.error, marginBottom: 8, padding: 8, background: T.error + '15', borderRadius: 4 }}>
+              {aiTestError}
+            </div>
+          )}
+          
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              className="btn"
+              onClick={handleTestAi}
+              disabled={aiTesting || aiSaving}
+              style={{ flex: 1 }}
+            >
+              {aiTesting ? (
+                <>
+                  <div className="spin" style={{ width: 14, height: 14 }} /> Đang test...
+                </>
+              ) : (
+                <>
+                  <Icon d={ic.check} s={13} /> Test kết nối
+                </>
+              )}
+            </button>
+            
+            <button
+              className="btn btn-p"
+              onClick={handleSaveAi}
+              disabled={aiSaving || aiTesting}
+              style={{ flex: 1 }}
+            >
+              {aiSaving ? (
+                <>
+                  <div className="spin" style={{ width: 14, height: 14 }} /> Đang lưu...
+                </>
+              ) : (
+                <>
+                  <Icon d={ic.check} s={13} /> Lưu cấu hình AI
+                </>
+              )}
+            </button>
+          </div>
         </>
       )}
     </div>

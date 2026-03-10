@@ -28,6 +28,25 @@ export const globalCSS = `
 .inp:focus{border-color:${T.accent}}.inp::placeholder{color:${T.textMuted}}
 input[type="date"].inp{color-scheme:dark}
 select.inp{appearance:none;cursor:pointer;background-image:url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%238888a0' fill='none' stroke-width='1.5'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding-right:32px}
+.date-picker-wrapper{width:100%}
+.react-datepicker-wrapper{width:100%}
+.react-datepicker__input-container input{width:100%}
+.react-datepicker{font-family:'Be Vietnam Pro',system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;border:1px solid ${T.cardBorder};border-radius:8px;background:${T.card}}
+.react-datepicker__header{background:${T.surface};border-bottom:1px solid ${T.cardBorder};border-radius:8px 8px 0 0;padding-top:8px}
+.react-datepicker__current-month{color:${T.text};font-size:13px;font-weight:600;margin-bottom:8px}
+.react-datepicker__day-name{color:${T.textMuted};font-size:11px;font-weight:600;width:32px;line-height:32px;margin:2px}
+.react-datepicker__day{color:${T.text};font-size:12px;width:32px;line-height:32px;margin:2px;border-radius:6px;transition:all .15s}
+.react-datepicker__day:hover{background:${T.surfaceAlt};color:${T.accent}}
+.react-datepicker__day--selected{background:${T.accent};color:${T.bg};font-weight:600}
+.react-datepicker__day--selected:hover{background:${T.accentLight}}
+.react-datepicker__day--keyboard-selected{background:${T.accent}40;color:${T.accent}}
+.react-datepicker__day--today{font-weight:700;color:${T.accent}}
+.react-datepicker__day--disabled{color:${T.textMuted};opacity:.4;cursor:not-allowed}
+.react-datepicker__day--outside-month{color:${T.textMuted};opacity:.4}
+.react-datepicker__navigation{top:8px}
+.react-datepicker__navigation-icon::before{border-color:${T.textSec}}
+.react-datepicker__navigation:hover *::before{border-color:${T.accent}}
+.react-datepicker__triangle{display:none}
 textarea.inp{min-height:60px;resize:vertical;font-size:13px;line-height:1.5;font-family:'Be Vietnam Pro',system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
 .badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:.03em}
 .tw{overflow-x:auto}

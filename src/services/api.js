@@ -72,6 +72,7 @@ export const dbApi = {
     const q = new URLSearchParams(params).toString();
     return request(`/db/datamart/predictions${q ? `?${q}` : ''}`);
   },
+  getCustomerByPhone: (phone) => request(`/db/v1/customer/${encodeURIComponent(phone)}`),
 };
 
 export const aiApi = {
@@ -81,6 +82,18 @@ export const aiApi = {
   updateConfig: (modelId, updates) => request(`/ai/config/${modelId}`, {
     method: 'PUT',
     body: JSON.stringify(updates),
+  }),
+  testConnection: (modelId, apiKey, apiEndpoint) => request('/ai/test', {
+    method: 'POST',
+    body: JSON.stringify({ modelId, apiKey, apiEndpoint }),
+  }),
+  runPredictions: (data) => request('/ai/predictions', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }),
+  analyzeCustomer: (phone, customerData) => request('/ai/customer-analysis', {
+    method: 'POST',
+    body: JSON.stringify({ phone, customerData }),
   }),
 };
 

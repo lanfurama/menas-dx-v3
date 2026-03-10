@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
   ComposedChart, Bar, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
 } from 'recharts';
@@ -10,6 +10,7 @@ import { usePredictions } from '../hooks/usePredictions.js';
 import { transformPredictionsData } from '../utils/predictionsData.js';
 import { formatValue, formatNumber } from '../utils/format.js';
 import { useAuth } from '../hooks/useAuth.js';
+import { aiApi } from '../services/api.js';
 
 const tt = tooltipStyle;
 
@@ -49,24 +50,95 @@ export function Predictions({ dbOn, demoData, canExport, addLog }) {
   const [predLoading, setPredLoading] = useState(false);
   const [predDone, setPredDone] = useState(false);
   const [aiModel, setAiModel] = useState("claude");
+  const [aiPredictionsData, setAiPredictionsData] = useState(null);
+  const [predError, setPredError] = useState('');
+
+  // Load default AI model from database
+  useEffect(() => {
+    const loadDefaultModel = async () => {
+      try {
+        const { configs } = await aiApi.getConfigs();
+        const defaultConfig = configs.find(c => c.is_default);
+        if (defaultConfig) {
+          setAiModel(defaultConfig.model_id);
+        }
+      } catch (error) {
+        console.error('Failed to load AI config:', error);
+      }
+    };
+    loadDefaultModel();
+  }, []);
 
   const predPeriodObj = PRED_PERIODS.find(p => p.id === predPeriod) || PRED_PERIODS[0];
   const predM = predPeriodObj.m;
 
   const { data: apiData, loading: apiLoading, error } = usePredictions(dbOn, { period: predPeriod });
-  const { forecast, kpis, events, insights } = useMemo(
-    () => transformPredictionsData(dbOn, apiData, error, demoData, predM, EXT_SIGNALS),
-    [dbOn, apiData, error, demoData, predM]
-  );
+  
+  // Use AI predictions data if available, otherwise use transformed data
+  const { forecast, kpis, events, insights } = useMemo(() => {
+    if (predDone && aiPredictionsData) {
+      // Use AI predictions result
+      return {
+        forecast: (aiPredictionsData.forecast || []).map(f => ({
+          month: f.month || 'T1',
+          rev: Number(f.revenue) / 1e9 || 0,
+          prevRev: Number(f.prevRevenue) / 1e9 || 0,
+          orders: parseInt(f.orders, 10) || 0,
+          newCust: parseInt(f.newCustomers, 10) || 0,
+          churn: parseInt(f.churnRisk, 10) || 0,
+        })),
+        kpis: {
+          totalRevenue: Number(aiPredictionsData.totalRevenue) / 1e9 || 0,
+          totalOrders: parseInt(aiPredictionsData.totalOrders, 10) || 0,
+          totalNew: parseInt(aiPredictionsData.totalNewCustomers, 10) || 0,
+          totalChurn: parseInt(aiPredictionsData.totalChurnRisk, 10) || 0,
+        },
+        events: aiPredictionsData.events || [],
+        insights: aiPredictionsData.insights || [],
+      };
+    }
+    // Use transformed data from API or demo
+    return transformPredictionsData(dbOn, apiData, error, demoData, predM, EXT_SIGNALS);
+  }, [dbOn, apiData, error, demoData, predM, predDone, aiPredictionsData]);
 
   const runPred = async () => {
-    setPredLoading(true);
-    await new Promise(r => setTimeout(r, 1500));
-    setPredDone(true);
-    setPredLoading(false);
-    if (addLog) {
-      const totalRev = forecast.reduce((s, f) => s + (f.rev || 0), 0);
-      addLog("predict", "predictions", `Chạy dự báo ${predPeriodObj.label} — DT dự kiến ${formatValue(totalRev * 1e9)}`);
+    try {
+      setPredLoading(true);
+      setPredError('');
+      
+      // Prepare data for AI
+      const overviewData = demoData?.overview || { total_customers: 12847, active_customers: 9234 };
+      const internalData = {
+        totalCustomers: overviewData.total_customers,
+        activeCustomers: overviewData.active_customers,
+        avgOrderValue: overviewData.avg_order_value || 2340000,
+        historicalRevenue: demoData?.revenueByMonth || [],
+      };
+
+      // Call AI predictions API
+      const result = await aiApi.runPredictions({
+        period: predPeriod,
+        internalData,
+        events: EXT_SIGNALS.events,
+        weather: EXT_SIGNALS.weather,
+        market: EXT_SIGNALS.market,
+      });
+
+      if (result.success) {
+        setAiPredictionsData(result);
+        setPredDone(true);
+        if (addLog) {
+          const totalRev = Number(result.totalRevenue) / 1e9 || 0;
+          addLog("predict", "predictions", `Chạy dự báo ${predPeriodObj.label} — DT dự kiến ${formatValue(totalRev * 1e9)}`);
+        }
+      } else {
+        setPredError(result.error || 'Lỗi khi chạy dự báo');
+      }
+    } catch (error) {
+      console.error('Error running predictions:', error);
+      setPredError(error.message || 'Lỗi khi chạy dự báo');
+    } finally {
+      setPredLoading(false);
     }
   };
 
@@ -85,6 +157,26 @@ export function Predictions({ dbOn, demoData, canExport, addLog }) {
   const currentModel = AI_MODELS.find(m => m.id === aiModel) || AI_MODELS[0];
   const overviewData = demoData?.overview || { total_customers: 12847 };
   const totalOrdersHist = demoData?.revenueByMonth?.reduce((s, r) => s + (r.orders || 0), 0) || 0;
+
+  // Transform insights to include icon constants
+  const transformedInsights = useMemo(() => {
+    if (!insights || insights.length === 0) return [];
+    return insights.map(ins => {
+      if (ins.ic2) return ins; // Already has icon
+      // Map type to icon
+      const iconMap = {
+        danger: ic.alert,
+        warning: ic.target,
+        info: ic.alert,
+        success: ic.trend,
+        purple: ic.package
+      };
+      return {
+        ...ins,
+        ic2: iconMap[ins.c] || ic.alert
+      };
+    });
+  }, [insights]);
 
   return (
     <div className="fu">
@@ -126,9 +218,9 @@ export function Predictions({ dbOn, demoData, canExport, addLog }) {
             className="btn btn-ai"
             style={{ marginLeft: "auto", padding: "7px 18px" }}
             onClick={runPred}
-            disabled={predLoading || apiLoading}
+            disabled={predLoading}
           >
-            {predLoading || apiLoading ? (
+            {predLoading ? (
               <>
                 <div className="spin" style={{ width: 13, height: 13 }} /> Đang phân tích...
               </>
@@ -171,8 +263,16 @@ export function Predictions({ dbOn, demoData, canExport, addLog }) {
         </div>
       </div>
 
+      {/* Error */}
+      {predError && (
+        <div className="card" style={{ padding: 16, marginBottom: 14, background: T.error + "15", border: `1px solid ${T.error}30` }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: T.error, marginBottom: 4 }}>Lỗi khi chạy dự báo</div>
+          <div style={{ fontSize: 11, color: T.textSec }}>{predError}</div>
+        </div>
+      )}
+
       {/* Loading */}
-      {(predLoading || apiLoading) && (
+      {predLoading && (
         <div className="card" style={{ padding: 30, textAlign: "center", marginBottom: 14 }}>
           <div className="spin" style={{ width: 28, height: 28, margin: "0 auto 12px", borderWidth: 3 }} />
           <div style={{ fontSize: 14, fontWeight: 700, color: T.accent, marginBottom: 4 }}>AI đang tổng hợp đa nguồn dữ liệu...</div>
@@ -183,7 +283,7 @@ export function Predictions({ dbOn, demoData, canExport, addLog }) {
       )}
 
       {/* Results */}
-      {predDone && !predLoading && !apiLoading && (
+      {predDone && !predLoading && (
         <>
           {/* KPI Forecast */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 14 }}>
@@ -348,7 +448,7 @@ export function Predictions({ dbOn, demoData, canExport, addLog }) {
           <div className="card" style={{ border: `1px solid ${T.purple}25` }}>
             <Section icon={ic.sparkle} title="AI Insights (Tổng hợp đa nguồn)" />
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {insights.map((ins, i) => (
+              {transformedInsights.map((ins, i) => (
                 <div key={i} style={{ display: "flex", gap: 12, padding: "10px 14px", borderRadius: 10, background: ins.c + "06", border: `1px solid ${ins.c}15` }}>
                   <div style={{ width: 32, height: 32, borderRadius: 8, background: ins.c + "18", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                     <Icon d={ins.ic2} s={14} c={ins.c} />
@@ -365,7 +465,7 @@ export function Predictions({ dbOn, demoData, canExport, addLog }) {
       )}
 
       {/* Initial state - before running */}
-      {!predDone && !predLoading && !apiLoading && (
+      {!predDone && !predLoading && (
         <div className="card" style={{ padding: 35, textAlign: "center" }}>
           <div style={{ width: 60, height: 60, borderRadius: 14, background: T.accent + "12", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
             <Icon d={ic.zap} s={28} c={T.accent} />

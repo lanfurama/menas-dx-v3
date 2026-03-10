@@ -107,3 +107,134 @@ export const getCustomerStores = (customerId) => ({
   `,
   values: [customerId]
 });
+
+// Normalize phone number: remove spaces, dashes, convert +84 to 0
+export const normalizePhone = (phone) => {
+  if (!phone) return '';
+  return phone
+    .replace(/\s+/g, '')
+    .replace(/-/g, '')
+    .replace(/\+84/g, '0')
+    .trim();
+};
+
+// Get customer by phone number
+export const getCustomerByPhone = (phone) => {
+  const normalizedPhone = normalizePhone(phone);
+  return {
+    text: `
+      SELECT 
+        c."MaTheKHTT",
+        MAX(c."name") AS "name",
+        MAX(c."email") AS "email",
+        MAX(c."phone") AS "phone",
+        MAX(c."loyalty_tier") AS "loyalty_tier",
+        MAX(c."status") AS "status",
+        COUNT(DISTINCT c."MaHD") AS "total_orders",
+        COALESCE(SUM(c."ThanhTienBan"), 0) AS "total_spent",
+        MAX(c."NgayHD") AS "last_purchase",
+        MIN(c."NgayHD") AS "first_purchase",
+        MAX(c."store_name") AS "store_primary",
+        CASE 
+          WHEN COUNT(DISTINCT c."MaHD") > 0 
+          THEN ROUND(COALESCE(SUM(c."ThanhTienBan"), 0) / COUNT(DISTINCT c."MaHD"), 0)
+          ELSE 0 
+        END AS "avg_basket",
+        CASE 
+          WHEN MAX(c."NgayHD") IS NOT NULL AND MIN(c."NgayHD") IS NOT NULL
+          THEN ROUND(
+            COUNT(DISTINCT c."MaHD")::NUMERIC / 
+            GREATEST(
+              EXTRACT(EPOCH FROM (MAX(c."NgayHD") - MIN(c."NgayHD"))) / 2592000.0,
+              1
+            ),
+            2
+          )
+          ELSE 0
+        END AS "frequency_month"
+      FROM public.datamart_customer c
+      WHERE c."phone" = $1 OR REPLACE(REPLACE(REPLACE(c."phone", ' ', ''), '-', ''), '+84', '0') = $1
+      GROUP BY c."MaTheKHTT"
+      LIMIT 1
+    `,
+    values: [normalizedPhone]
+  };
+};
+
+// Get customer purchase history (recent orders)
+export const getCustomerPurchaseHistory = (customerId, limit = 20) => ({
+  text: `
+    SELECT 
+      t."MaHD" AS "order_id",
+      MAX(t."NgayGioQuet")::date AS "date",
+      MAX(t."store_name") AS "store",
+      SUM(t."ThanhTienBan") AS "total",
+      COALESCE(SUM(t."TienGiamGia"), 0) AS "discount",
+      json_agg(
+        json_build_object(
+          'sku', t."MaHH",
+          'name', t."TenHH",
+          'price', t."DGBan",
+          'qty', t."SoLuong",
+          'cat', t."category_name",
+          'amt', t."ThanhTienBan"
+        ) ORDER BY t."STT" NULLS LAST, t."MaHH" NULLS LAST
+      ) AS "items"
+    FROM public.datamart_transaction t
+    WHERE t."MaTheKHTT"::text = $1
+      AND t."MaHD" IS NOT NULL AND TRIM(COALESCE(t."MaHD",'')) != ''
+    GROUP BY t."MaHD"
+    ORDER BY MAX(t."NgayGioQuet") DESC NULLS LAST
+    LIMIT $2
+  `,
+  values: [customerId, limit]
+});
+
+// Get customer top products
+export const getCustomerTopProducts = (customerId, limit = 10) => ({
+  text: `
+    SELECT 
+      "TenHH" AS "name",
+      COUNT(DISTINCT "MaHD") AS "orders",
+      SUM("ThanhTienBan") AS "revenue"
+    FROM public.datamart_transaction
+    WHERE "MaTheKHTT"::text = $1 AND "TenHH" IS NOT NULL AND TRIM("TenHH") != ''
+    GROUP BY "TenHH"
+    ORDER BY "revenue" DESC
+    LIMIT $2
+  `,
+  values: [customerId, limit]
+});
+
+// Get customer top categories
+export const getCustomerTopCategories = (customerId, limit = 10) => ({
+  text: `
+    SELECT 
+      "category_name" AS "name",
+      COUNT(DISTINCT "MaHD") AS "orders",
+      SUM("ThanhTienBan") AS "revenue"
+    FROM public.datamart_transaction
+    WHERE "MaTheKHTT"::text = $1 AND "category_name" IS NOT NULL AND TRIM("category_name") != ''
+    GROUP BY "category_name"
+    ORDER BY "revenue" DESC
+    LIMIT $2
+  `,
+  values: [customerId, limit]
+});
+
+// Get customer behavior patterns (preferred time, day, payment method)
+export const getCustomerBehaviorPatterns = (customerId) => ({
+  text: `
+    SELECT 
+      EXTRACT(HOUR FROM "NgayGioQuet") AS "hour",
+      EXTRACT(DOW FROM "NgayGioQuet") AS "day_of_week",
+      COUNT(DISTINCT "MaHD") AS "order_count",
+      AVG("SoLuong") AS "avg_basket_size"
+    FROM public.datamart_transaction
+    WHERE "MaTheKHTT"::text = $1 
+      AND "NgayGioQuet" IS NOT NULL
+    GROUP BY EXTRACT(HOUR FROM "NgayGioQuet"), EXTRACT(DOW FROM "NgayGioQuet")
+    ORDER BY "order_count" DESC
+  `,
+  values: [customerId]
+});

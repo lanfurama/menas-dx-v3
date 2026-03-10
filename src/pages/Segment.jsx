@@ -1,5 +1,7 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import DatePicker from 'react-datepicker';
+import 'react-datepicker/dist/react-datepicker.css';
 import { T, ic } from '../constants/index.js';
 import { useCustomers } from '../hooks/useCustomers.js';
 import { formatValue, formatNumber } from '../utils/format.js';
@@ -9,15 +11,25 @@ import { Metric } from '../components/Metric.jsx';
 import { Tier } from '../components/Tier.jsx';
 import { ExportBtn } from '../components/ExportBtn.jsx';
 
-const SEG_FILTER_INIT = {
-  tiers: [], segments: [], categories: [],
-  spendMin: '', spendMax: '', ordersMin: '', ordersMax: '',
-  freqMin: '', freqMax: '', avgBasketMin: '', avgBasketMax: '',
-  daysSinceMin: '', daysSinceMax: '',
-  hasZalo: 'all', zaloFollow: 'all',
-  stores: [], txnStores: [],
-  lastPurchaseFrom: '', lastPurchaseTo: '', lastTxnAmtMin: '', lastTxnAmtMax: '',
+const getDefaultFilter = () => {
+  const today = new Date();
+  const sixtyDaysAgo = new Date(today);
+  sixtyDaysAgo.setDate(today.getDate() - 60);
+  const lastPurchaseFrom = sixtyDaysAgo.toISOString().split('T')[0];
+  const lastPurchaseTo = today.toISOString().split('T')[0];
+  
+  return {
+    tiers: ['Platinum', 'Gold'], segments: ['Champions', 'Loyal'], categories: [],
+    spendMin: '20000000', spendMax: '1000000000', ordersMin: '2', ordersMax: '1000',
+    freqMin: '2', freqMax: '20', avgBasketMin: '100000', avgBasketMax: '5000000',
+    daysSinceFrom: '', daysSinceTo: '',
+    hasZalo: 'all', zaloFollow: 'all',
+    stores: [], txnStores: [],
+    lastPurchaseFrom, lastPurchaseTo, lastTxnAmtMin: '50000', lastTxnAmtMax: '10000000',
+  };
 };
+
+const SEG_FILTER_INIT = getDefaultFilter();
 
 const ALL_TIERS = ['Platinum', 'Gold', 'Silver'];
 const ALL_SEGMENTS = ['Champions', 'Loyal', 'Potential', 'New', 'At Risk', 'Hibernating'];
@@ -67,9 +79,10 @@ export function Segment({ dbOn, demoData, canExport, addLog }) {
   const navigate = useNavigate();
   const { data: apiData, loading, error } = useCustomers(dbOn, { limit: 5000, offset: 0 });
 
-  const [segF, setSegF] = useState(SEG_FILTER_INIT);
+  const [segF, setSegF] = useState(() => getDefaultFilter());
   const [segRes, setSegRes] = useState(null);
   const [selCamp, setSelCamp] = useState([]);
+  const autoAppliedRef = useRef(false);
 
   const customers = useMemo(() => {
     if (dbOn && apiData?.data) {
@@ -88,9 +101,26 @@ export function Segment({ dbOn, demoData, canExport, addLog }) {
     return [...set];
   }, [customers]);
 
+  // Auto-apply filter when data is loaded (only once)
+  useEffect(() => {
+    if (customers.length > 0 && segRes === null && !loading && !autoAppliedRef.current) {
+      autoAppliedRef.current = true;
+      setTimeout(() => {
+        applyF();
+      }, 100);
+    }
+  }, [customers.length, loading]);
+
   const applyF = () => {
+    if (customers.length === 0) {
+      console.warn('[Segment] No customers data available');
+      setSegRes([]);
+      setSelCamp([]);
+      return;
+    }
     let list = [...customers];
     const f = segF;
+    console.log('[Segment] Applying filters:', f, 'on', customers.length, 'customers');
     if (f.tiers.length) list = list.filter((c) => f.tiers.includes(c.loyalty_tier));
     if (f.segments.length) list = list.filter((c) => f.segments.includes(c.segment));
     if (f.categories.length) list = list.filter((c) => (c.top_categories || []).some((cat) => f.categories.includes(cat)));
@@ -102,11 +132,11 @@ export function Segment({ dbOn, demoData, canExport, addLog }) {
     if (f.freqMax) list = list.filter((c) => c.frequency_month <= +f.freqMax);
     if (f.avgBasketMin) list = list.filter((c) => c.avg_basket >= +f.avgBasketMin);
     if (f.avgBasketMax) list = list.filter((c) => c.avg_basket <= +f.avgBasketMax);
-    if (f.daysSinceMin || f.daysSinceMax) {
-      const now = Date.now();
+    if (f.daysSinceFrom || f.daysSinceTo) {
       list = list.filter((c) => {
-        const d = c.last_purchase ? Math.floor((now - new Date(c.last_purchase)) / 864e5) : 999;
-        return (!f.daysSinceMin || d >= +f.daysSinceMin) && (!f.daysSinceMax || d <= +f.daysSinceMax);
+        if (!c.last_purchase) return false;
+        const lastPurchaseDate = c.last_purchase.split('T')[0];
+        return (!f.daysSinceFrom || lastPurchaseDate >= f.daysSinceFrom) && (!f.daysSinceTo || lastPurchaseDate <= f.daysSinceTo);
       });
     }
     if (f.hasZalo === 'yes') list = list.filter((c) => c.has_zalo);
@@ -119,15 +149,17 @@ export function Segment({ dbOn, demoData, canExport, addLog }) {
     if (f.lastPurchaseTo) list = list.filter((c) => c.last_purchase <= f.lastPurchaseTo);
     if (f.lastTxnAmtMin) list = list.filter((c) => (c.last_txn_amount || 0) >= +f.lastTxnAmtMin);
     if (f.lastTxnAmtMax) list = list.filter((c) => (c.last_txn_amount || 0) <= +f.lastTxnAmtMax);
+    console.log('[Segment] Filter result:', list.length, 'customers');
     setSegRes(list);
     setSelCamp(list.map((c) => c.id));
     addLog?.('filter', 'segment', `Lọc KH: ${list.length} KH phù hợp${f.tiers.length ? ' — Tier: ' + f.tiers.join(',') : ''}${f.segments.length ? ' — Seg: ' + f.segments.join(',') : ''}`);
   };
 
   const resetF = () => {
-    setSegF(SEG_FILTER_INIT);
+    setSegF(getDefaultFilter());
     setSegRes(null);
     setSelCamp([]);
+    autoAppliedRef.current = false;
   };
 
   const togChip = (k, v) => {
@@ -159,6 +191,16 @@ export function Segment({ dbOn, demoData, canExport, addLog }) {
 
   const categoriesList = allCategories.length ? allCategories : ALL_CATEGORIES;
 
+  // Debug info
+  console.log('[Segment] Debug:', {
+    dbOn,
+    loading,
+    error,
+    apiData: apiData ? { total: apiData.total, dataLength: apiData.data?.length } : null,
+    customersLength: customers.length,
+    demoDataLength: demoData?.customers?.length
+  });
+
   if (dbOn && loading) {
     return (
       <div className="fu" style={{ padding: 24, display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -171,7 +213,22 @@ export function Segment({ dbOn, demoData, canExport, addLog }) {
   if (dbOn && error) {
     return (
       <div className="fu" style={{ padding: 24 }}>
-        <div style={{ fontSize: 12, color: T.danger }}>{error}</div>
+        <div style={{ fontSize: 12, color: T.danger, marginBottom: 8 }}>Lỗi tải dữ liệu: {error}</div>
+        <div style={{ fontSize: 11, color: T.textMuted }}>Kiểm tra console để xem chi tiết lỗi</div>
+      </div>
+    );
+  }
+
+  if (dbOn && !loading && !error && (!apiData || !apiData.data || apiData.data.length === 0)) {
+    return (
+      <div className="fu" style={{ padding: 24 }}>
+        <div style={{ fontSize: 13, color: T.textMuted, marginBottom: 8 }}>Không có dữ liệu khách hàng từ database</div>
+        <div style={{ fontSize: 11, color: T.textMuted }}>Vui lòng kiểm tra:</div>
+        <ul style={{ fontSize: 11, color: T.textMuted, marginTop: 8, paddingLeft: 20 }}>
+          <li>Backend server có đang chạy không</li>
+          <li>Database connection có hoạt động không (Settings → Database)</li>
+          <li>Bảng datamart_customer có dữ liệu không</li>
+        </ul>
       </div>
     );
   }
@@ -180,9 +237,14 @@ export function Segment({ dbOn, demoData, canExport, addLog }) {
     <div className="fu">
       <div className="card" style={{ marginBottom: 14 }}>
         <Section icon={ic.sliders} title="Bộ lọc khách hàng nâng cao">
-          <div style={{ display: 'flex', gap: 6 }}>
-            <button className="btn btn-p btn-sm" onClick={applyF}><Icon d={ic.filter} s={12} /> Áp dụng</button>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <button className="btn btn-p btn-sm" onClick={applyF} disabled={customers.length === 0}><Icon d={ic.filter} s={12} /> Áp dụng</button>
             <button className="btn btn-g btn-sm" onClick={resetF}><Icon d={ic.x} s={12} /> Reset</button>
+            {dbOn && (
+              <div style={{ fontSize: 10, color: T.textMuted, marginLeft: 'auto' }}>
+                {loading ? 'Đang tải...' : error ? 'Lỗi' : apiData ? `${customers.length} KH` : 'Chưa tải'}
+              </div>
+            )}
           </div>
         </Section>
 
@@ -253,9 +315,23 @@ export function Segment({ dbOn, demoData, canExport, addLog }) {
           <div>
             <span className="label-sm">Ngày kể từ lần mua cuối</span>
             <div className="range-row" style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
-              <input className="inp" placeholder="Từ (ngày)" value={segF.daysSinceMin} onChange={(e) => setSegF((p) => ({ ...p, daysSinceMin: e.target.value }))} />
+              <DatePicker
+                selected={segF.daysSinceFrom ? new Date(segF.daysSinceFrom) : null}
+                onChange={(date) => setSegF((p) => ({ ...p, daysSinceFrom: date ? date.toISOString().split('T')[0] : '' }))}
+                dateFormat="dd/MM/yyyy"
+                placeholderText="Từ ngày"
+                className="inp"
+                wrapperClassName="date-picker-wrapper"
+              />
               <span style={{ color: T.textMuted }}>—</span>
-              <input className="inp" placeholder="Đến (ngày)" value={segF.daysSinceMax} onChange={(e) => setSegF((p) => ({ ...p, daysSinceMax: e.target.value }))} />
+              <DatePicker
+                selected={segF.daysSinceTo ? new Date(segF.daysSinceTo) : null}
+                onChange={(date) => setSegF((p) => ({ ...p, daysSinceTo: date ? date.toISOString().split('T')[0] : '' }))}
+                dateFormat="dd/MM/yyyy"
+                placeholderText="Đến ngày"
+                className="inp"
+                wrapperClassName="date-picker-wrapper"
+              />
             </div>
           </div>
         </div>
@@ -281,9 +357,23 @@ export function Segment({ dbOn, demoData, canExport, addLog }) {
           <div>
             <span className="label-sm">Lần GD gần nhất (từ ngày)</span>
             <div className="range-row" style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
-              <input type="date" className="inp" value={segF.lastPurchaseFrom} onChange={(e) => setSegF((p) => ({ ...p, lastPurchaseFrom: e.target.value }))} />
+              <DatePicker
+                selected={segF.lastPurchaseFrom ? new Date(segF.lastPurchaseFrom) : null}
+                onChange={(date) => setSegF((p) => ({ ...p, lastPurchaseFrom: date ? date.toISOString().split('T')[0] : '' }))}
+                dateFormat="dd/MM/yyyy"
+                placeholderText="Từ ngày"
+                className="inp"
+                wrapperClassName="date-picker-wrapper"
+              />
               <span style={{ color: T.textMuted }}>—</span>
-              <input type="date" className="inp" value={segF.lastPurchaseTo} onChange={(e) => setSegF((p) => ({ ...p, lastPurchaseTo: e.target.value }))} />
+              <DatePicker
+                selected={segF.lastPurchaseTo ? new Date(segF.lastPurchaseTo) : null}
+                onChange={(date) => setSegF((p) => ({ ...p, lastPurchaseTo: date ? date.toISOString().split('T')[0] : '' }))}
+                dateFormat="dd/MM/yyyy"
+                placeholderText="Đến ngày"
+                className="inp"
+                wrapperClassName="date-picker-wrapper"
+              />
             </div>
           </div>
           <div>
@@ -323,43 +413,58 @@ export function Segment({ dbOn, demoData, canExport, addLog }) {
           <div className="card" style={{ marginBottom: 12 }}>
             <Section icon={ic.users} title={`Tệp KH (${res.length})`}>
               <div style={{ display: 'flex', gap: 6 }}>
-                <button className="btn btn-z btn-sm" onClick={handleGửiZNS}><Icon d={ic.send} s={12} /> Gửi ZNS</button>
-                <button className="btn btn-ai btn-sm" onClick={handleHỏiAI}><Icon d={ic.brain} s={12} /> Hỏi AI</button>
+                <button className="btn btn-z btn-sm" onClick={handleGửiZNS} disabled={res.length === 0}><Icon d={ic.send} s={12} /> Gửi ZNS</button>
+                <button className="btn btn-ai btn-sm" onClick={handleHỏiAI} disabled={res.length === 0}><Icon d={ic.brain} s={12} /> Hỏi AI</button>
                 <ExportBtn canExport={canExport} data={exportData} filename={`segment_filter_${res.length}kh`} />
               </div>
             </Section>
-            <div className="tw">
-              <table>
-                <thead>
-                  <tr>
-                    {['', 'Mã', 'Tên', 'Hạng', 'Chi tiêu', 'Đơn', 'Tần suất', 'Danh mục', 'Segment', 'Zalo'].map((h) => (
-                      <th key={h}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {res.map((c) => (
-                    <tr key={c.id} className="rh">
-                      <td>
-                        <input type="checkbox" checked={selCamp.includes(c.id)} onChange={() => setSelCamp((p) => (p.includes(c.id) ? p.filter((x) => x !== c.id) : [...p, c.id]))} />
-                      </td>
-                      <td style={{ color: T.accent, fontWeight: 600, fontSize: 11 }}>{c.MaTheKHTT}</td>
-                      <td style={{ fontWeight: 600, fontSize: 12 }}>{c.name}</td>
-                      <td><Tier t={c.loyalty_tier} /></td>
-                      <td className="counter" style={{ fontSize: 11 }}>{formatValue(c.total_spent)}</td>
-                      <td>{c.total_orders}</td>
-                      <td style={{ color: T.info, fontWeight: 600 }}>{c.frequency_month}</td>
-                      <td style={{ fontSize: 10, color: T.textSec }}>{(c.top_categories || []).slice(0, 2).join(', ')}</td>
-                      <td>
-                        <span className="badge" style={{ background: `${c.segment === 'Champions' ? T.success : T.info}18`, color: c.segment === 'Champions' ? T.success : T.info, fontSize: 9 }}>{c.segment}</span>
-                      </td>
-                      <td>{c.has_zalo ? <Icon d={ic.check} s={12} c={T.success} /> : <Icon d={ic.x} s={12} c={T.textMuted} />}</td>
+            {res.length === 0 ? (
+              <div style={{ padding: 40, textAlign: 'center', color: T.textMuted }}>
+                <Icon d={ic.users} s={32} c={T.textMuted} />
+                <div style={{ marginTop: 12, fontSize: 13 }}>Không có khách hàng nào phù hợp với bộ lọc</div>
+                <div style={{ marginTop: 4, fontSize: 11 }}>Thử điều chỉnh các tiêu chí lọc hoặc nhấn Reset để xem tất cả</div>
+              </div>
+            ) : (
+              <div className="tw">
+                <table>
+                  <thead>
+                    <tr>
+                      {['', 'Mã', 'Tên', 'Hạng', 'Chi tiêu', 'Đơn', 'Tần suất', 'Danh mục', 'Segment', 'Zalo'].map((h) => (
+                        <th key={h}>{h}</th>
+                      ))}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {res.map((c) => (
+                      <tr key={c.id} className="rh">
+                        <td>
+                          <input type="checkbox" checked={selCamp.includes(c.id)} onChange={() => setSelCamp((p) => (p.includes(c.id) ? p.filter((x) => x !== c.id) : [...p, c.id]))} />
+                        </td>
+                        <td style={{ color: T.accent, fontWeight: 600, fontSize: 11 }}>{c.MaTheKHTT}</td>
+                        <td style={{ fontWeight: 600, fontSize: 12 }}>{c.name}</td>
+                        <td><Tier t={c.loyalty_tier} /></td>
+                        <td className="counter" style={{ fontSize: 11 }}>{formatValue(c.total_spent)}</td>
+                        <td>{c.total_orders}</td>
+                        <td style={{ color: T.info, fontWeight: 600 }}>{c.frequency_month}</td>
+                        <td style={{ fontSize: 10, color: T.textSec }}>{(c.top_categories || []).slice(0, 2).join(', ')}</td>
+                        <td>
+                          <span className="badge" style={{ background: `${c.segment === 'Champions' ? T.success : T.info}18`, color: c.segment === 'Champions' ? T.success : T.info, fontSize: 9 }}>{c.segment}</span>
+                        </td>
+                        <td>{c.has_zalo ? <Icon d={ic.check} s={12} c={T.success} /> : <Icon d={ic.x} s={12} c={T.textMuted} />}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
+        </div>
+      )}
+      {!dbOn && customers.length === 0 && (
+        <div className="fu" style={{ padding: 24, textAlign: 'center', color: T.textMuted }}>
+          <Icon d={ic.database} s={32} c={T.textMuted} />
+          <div style={{ marginTop: 12, fontSize: 13 }}>Chưa có dữ liệu khách hàng</div>
+          <div style={{ marginTop: 4, fontSize: 11 }}>Vui lòng bật kết nối database hoặc tải dữ liệu demo</div>
         </div>
       )}
     </div>

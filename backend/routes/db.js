@@ -496,8 +496,15 @@ router.get('/datamart/customer/:customerId/modal', async (req, res) => {
       GROUP BY t."MaHD" ORDER BY MAX(t."NgayGioQuet") DESC NULLS LAST LIMIT 100
     `;
 
-    const [txRes, configPersona] = await Promise.all([
+    const countQuery = `
+      SELECT COUNT(DISTINCT "MaHD") AS total
+      FROM public.datamart_transaction
+      WHERE "MaTheKHTT"::text=$1 AND "MaHD" IS NOT NULL AND TRIM(COALESCE("MaHD",''))!=''
+    `;
+
+    const [txRes, countRes, configPersona] = await Promise.all([
       externalPool.query(txQuery, [custIdStr]),
+      externalPool.query(countQuery, [custIdStr]),
       configPool.query(`SELECT value_seg,lifecycle,aov_level,freq_level,product_persona,payment_persona,price_sens,shop_mission,channel,note FROM customer_persona WHERE MaTheKHTT=$1 LIMIT 1`, [custIdStr]).catch(() => ({ rows: [] })),
     ]);
 
@@ -574,9 +581,11 @@ router.get('/datamart/customer/:customerId/modal', async (req, res) => {
       }
     }
 
+    const totalOrders = parseInt(countRes.rows[0]?.total || 0, 10);
+
     res.json({
       details: { categories, products, stores },
-      orders: { data: orders, total: orders.length, limit: 100, offset: 0 },
+      orders: { data: orders, total: totalOrders, limit: 100, offset: 0 },
       persona: persona ? { persona } : { persona: null },
     });
   } catch (err) {
@@ -1073,6 +1082,177 @@ router.get('/datamart/predictions', async (req, res) => {
   } catch (error) {
     console.error('Error querying predictions:', error);
     res.status(500).json({ error: error.message });
+  }
+});
+
+// Get unified customer profile by phone number (for AI analysis)
+router.get('/v1/customer/:phone', async (req, res) => {
+  try {
+    const { phone } = req.params;
+    const externalPool = await getActiveExternalPool();
+    
+    // Find customer by phone
+    const customerResult = await externalPool.query(customerQueries.getCustomerByPhone(phone));
+    
+    if (customerResult.rows.length === 0) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'Không tìm thấy khách hàng với số điện thoại này' 
+      });
+    }
+    
+    const customer = customerResult.rows[0];
+    const customerId = customer.MaTheKHTT;
+    
+    // Get all related data in parallel
+    const [purchaseHistory, topProducts, topCategories, behaviorPatterns] = await Promise.all([
+      externalPool.query(customerQueries.getCustomerPurchaseHistory(customerId, 20)),
+      externalPool.query(customerQueries.getCustomerTopProducts(customerId, 10)),
+      externalPool.query(customerQueries.getCustomerTopCategories(customerId, 10)),
+      externalPool.query(customerQueries.getCustomerBehaviorPatterns(customerId))
+    ]);
+    
+    // Calculate days since last purchase
+    const lastPurchase = customer.last_purchase ? new Date(customer.last_purchase) : null;
+    const daysSinceLastPurchase = lastPurchase 
+      ? Math.floor((Date.now() - lastPurchase.getTime()) / 864e5) 
+      : null;
+    
+    // Process behavior patterns
+    const behaviorData = behaviorPatterns.rows;
+    let preferredTime = null;
+    let preferredDay = null;
+    let avgBasketSize = 0;
+    
+    if (behaviorData.length > 0) {
+      // Find most common hour
+      const hourCounts = {};
+      behaviorData.forEach(b => {
+        const hour = Math.floor(b.hour);
+        hourCounts[hour] = (hourCounts[hour] || 0) + parseInt(b.order_count);
+      });
+      const maxHour = Object.keys(hourCounts).reduce((a, b) => hourCounts[a] > hourCounts[b] ? a : b);
+      preferredTime = maxHour < 12 ? 'morning' : maxHour < 18 ? 'afternoon' : 'evening';
+      
+      // Find most common day (0=Sunday, 6=Saturday)
+      const dayCounts = {};
+      behaviorData.forEach(b => {
+        const day = parseInt(b.day_of_week);
+        dayCounts[day] = (dayCounts[day] || 0) + parseInt(b.order_count);
+      });
+      const maxDay = Object.keys(dayCounts).reduce((a, b) => dayCounts[a] > dayCounts[b] ? a : b);
+      const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+      preferredDay = dayNames[parseInt(maxDay)];
+      
+      // Calculate average basket size
+      const totalQty = behaviorData.reduce((sum, b) => sum + parseFloat(b.avg_basket_size || 0), 0);
+      avgBasketSize = behaviorData.length > 0 ? totalQty / behaviorData.length : 0;
+    }
+    
+    // Calculate persona (similar to persona route logic)
+    const totalSpent = Number(customer.total_spent || 0);
+    const freq = Number(customer.frequency_month || 0);
+    const daysSince = daysSinceLastPurchase || 999;
+    
+    const rScore = daysSince <= 7 ? 5 : daysSince <= 30 ? 4 : daysSince <= 60 ? 3 : daysSince <= 120 ? 2 : 1;
+    const fScore = freq >= 4 ? 5 : freq >= 2.5 ? 4 : freq >= 1.5 ? 3 : freq >= 0.8 ? 2 : 1;
+    const mScore = totalSpent >= 50e6 ? 5 : totalSpent >= 20e6 ? 4 : totalSpent >= 10e6 ? 3 : totalSpent >= 5e6 ? 2 : 1;
+    const totalRFM = rScore + fScore + mScore;
+    
+    const segment =
+      totalRFM >= 13 ? 'Champions' :
+      totalRFM >= 10 ? 'Loyal' :
+      totalRFM >= 7 ? 'Potential' :
+      totalRFM >= 5 ? 'At Risk' :
+      'Hibernating';
+    
+    const valueSeg =
+      segment === 'Champions' ? 'Super VIP' :
+      segment === 'Loyal' ? 'VIP' :
+      segment === 'Potential' ? 'Regular' :
+      'Low';
+    
+    const lifecycle =
+      segment === 'Champions' || segment === 'Loyal' ? 'Loyal' :
+      segment === 'Potential' ? 'Growing' :
+      segment === 'At Risk' ? 'Declining' :
+      'Churning';
+    
+    const aovLevel =
+      customer.avg_basket >= 500000 ? 'High' :
+      customer.avg_basket >= 300000 ? 'Medium' :
+      'Low';
+    
+    const freqLevel =
+      freq >= 4 ? 'High' :
+      freq >= 2 ? 'Medium' :
+      'Low';
+    
+    // Format purchase history
+    const formattedHistory = purchaseHistory.rows.map(row => ({
+      order_id: row.order_id,
+      date: row.date ? new Date(row.date).toISOString().split('T')[0] : null,
+      store: row.store,
+      total: Number(row.total || 0),
+      discount: Number(row.discount || 0),
+      items: row.items || []
+    }));
+    
+    // Format response
+    res.json({
+      success: true,
+      customer: {
+        phone: customer.phone,
+        name: customer.name,
+        email: customer.email,
+        MaTheKHTT: customer.MaTheKHTT,
+        loyalty_tier: customer.loyalty_tier || 'Silver',
+        loyalty_points: 0, // Not available in current schema
+        total_orders: parseInt(customer.total_orders || 0),
+        total_spent: Number(customer.total_spent || 0),
+        avg_order_value: Number(customer.avg_basket || 0),
+        frequency_month: Number(customer.frequency_month || 0),
+        last_purchase: customer.last_purchase ? new Date(customer.last_purchase).toISOString().split('T')[0] : null,
+        first_purchase: customer.first_purchase ? new Date(customer.first_purchase).toISOString().split('T')[0] : null,
+        days_since_last_purchase: daysSinceLastPurchase,
+        store_primary: customer.store_primary,
+        purchase_history: formattedHistory,
+        top_products: topProducts.rows.map(p => ({
+          name: p.name,
+          orders: parseInt(p.orders || 0),
+          revenue: Number(p.revenue || 0)
+        })),
+        top_categories: topCategories.rows.map(c => ({
+          name: c.name,
+          orders: parseInt(c.orders || 0),
+          revenue: Number(c.revenue || 0)
+        })),
+        promotion_responses: {
+          total_promotions_received: 0, // Not available in current schema
+          total_promotions_used: 0,
+          response_rate: 0,
+          last_promotion_date: null
+        },
+        behavior_patterns: {
+          preferred_time: preferredTime,
+          preferred_day: preferredDay,
+          avg_basket_size: Math.round(avgBasketSize * 10) / 10,
+          preferred_payment: 'cash' // Default, not available in current schema
+        },
+        persona: {
+          value_seg: valueSeg,
+          lifecycle: lifecycle,
+          aov_level: aovLevel,
+          freq_level: freqLevel
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Error getting customer by phone:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message || 'Lỗi khi lấy thông tin khách hàng' 
+    });
   }
 });
 

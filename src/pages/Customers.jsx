@@ -6,7 +6,7 @@ import { Icon } from '../components/Icon.jsx';
 import { Tier } from '../components/Tier.jsx';
 import { ExportBtn } from '../components/ExportBtn.jsx';
 import { DEMO } from '../data/demo.js';
-import { dbApi } from '../services/api.js';
+import { dbApi, aiApi } from '../services/api.js';
 import { useBreakpoint } from '../hooks/useBreakpoint.js';
 
 // Demo orders data - sẽ được thay thế bằng API
@@ -58,8 +58,12 @@ export function Customers({ dbOn, demoData, canExport, addLog }) {
   const [expandedOrder, setExpandedOrder] = useState(null);
   const [customerDetails, setCustomerDetails] = useState(null);
   const [customerOrders, setCustomerOrders] = useState([]);
+  const [customerOrdersTotal, setCustomerOrdersTotal] = useState(null);
   const [customerPersona, setCustomerPersona] = useState(null);
   const [loadingDetails, setLoadingDetails] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState(null);
+  const [loadingAiAnalysis, setLoadingAiAnalysis] = useState(false);
+  const [aiAnalysisError, setAiAnalysisError] = useState(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const isMobile = useBreakpoint(768);
@@ -79,7 +83,10 @@ export function Customers({ dbOn, demoData, canExport, addLog }) {
     if (!selCustomer || !dbOn) {
       setCustomerDetails(null);
       setCustomerOrders([]);
+      setCustomerOrdersTotal(null);
       setCustomerPersona(null);
+      setAiAnalysis(null);
+      setAiAnalysisError(null);
       return;
     }
     
@@ -89,11 +96,22 @@ export function Customers({ dbOn, demoData, canExport, addLog }) {
         const res = await dbApi.getCustomerModal(selCustomer.MaTheKHTT);
         setCustomerDetails(res.details || {});
         setCustomerOrders(res.orders?.data || []);
+        // Use total from API response (this is the actual count from database)
+        // Use total from API response (this is the actual count from database)
+        // Always use total from API if provided, even if it's 0
+        const totalFromApi = res.orders?.total;
+        if (totalFromApi !== undefined && totalFromApi !== null) {
+          setCustomerOrdersTotal(totalFromApi);
+        } else {
+          // If API doesn't provide total, use the count from loaded orders as fallback
+          setCustomerOrdersTotal(res.orders?.data?.length || 0);
+        }
         setCustomerPersona(res.persona?.persona ?? null);
       } catch (err) {
         console.error('Error loading customer details:', err);
         setCustomerDetails(null);
         setCustomerOrders([]);
+        setCustomerOrdersTotal(null);
         setCustomerPersona(null);
       } finally {
         setLoadingDetails(false);
@@ -102,6 +120,45 @@ export function Customers({ dbOn, demoData, canExport, addLog }) {
     
     loadDetails();
   }, [selCustomer?.MaTheKHTT, dbOn]);
+
+  // Load AI analysis when customer is selected
+  useEffect(() => {
+    if (!selCustomer || !selCustomer.phone || !dbOn) {
+      setAiAnalysis(null);
+      setAiAnalysisError(null);
+      return;
+    }
+    
+    const loadAiAnalysis = async () => {
+      setLoadingAiAnalysis(true);
+      setAiAnalysisError(null);
+      try {
+        // First, get unified customer data
+        const customerDataRes = await dbApi.getCustomerByPhone(selCustomer.phone);
+        
+        if (!customerDataRes.success || !customerDataRes.customer) {
+          throw new Error('Không thể lấy dữ liệu khách hàng');
+        }
+        
+        // Then, call AI analysis
+        const analysisRes = await aiApi.analyzeCustomer(selCustomer.phone, customerDataRes.customer);
+        
+        if (analysisRes.success) {
+          setAiAnalysis(analysisRes.analysis);
+        } else {
+          throw new Error(analysisRes.error || 'Lỗi khi phân tích');
+        }
+      } catch (err) {
+        console.error('Error loading AI analysis:', err);
+        setAiAnalysisError(err.message || 'Lỗi khi phân tích khách hàng bằng AI');
+        setAiAnalysis(null);
+      } finally {
+        setLoadingAiAnalysis(false);
+      }
+    };
+    
+    loadAiAnalysis();
+  }, [selCustomer?.phone, dbOn]);
   
   const customers = useMemo(() => {
     if (dbOn && apiData?.data) {
@@ -224,6 +281,9 @@ export function Customers({ dbOn, demoData, canExport, addLog }) {
   const selOrders = dbOn
     ? (customerOrders || [])
     : (selCustomer ? (DEMO_ORDERS[selCustomer.id] || []) : []);
+  // Use customerOrdersTotal from API if available (set from API response)
+  // Fallback to enrichedCustomer.total_orders (from customer list) if API hasn't loaded yet
+  // This ensures consistency with the KPI row display
   const filteredOrders = useMemo(() => {
     return selOrders.filter(o => {
       if (orderDateFrom && o.date < orderDateFrom) return false;
@@ -252,6 +312,8 @@ export function Customers({ dbOn, demoData, canExport, addLog }) {
           top_products: customerDetails.products || selCustomer.top_products || [],
           transaction_stores: customerDetails.stores || selCustomer.transaction_stores || []
         };
+        // Get total orders from API response if available
+        const totalOrdersFromApi = customerDetails.total_orders || selCustomer.total_orders;
         return {
           ...selCustomer,
           ...mappedDetails,
@@ -259,6 +321,16 @@ export function Customers({ dbOn, demoData, canExport, addLog }) {
         };
       })()
     : null;
+
+  // Use customerOrdersTotal from API if available, but prioritize enrichedCustomer.total_orders for consistency
+  // KPI row shows enrichedCustomer.total_orders (1260), so we should use the same value here
+  // Only use customerOrdersTotal if it's significantly different (likely more accurate from transaction table)
+  // Otherwise, use enrichedCustomer.total_orders to match KPI row display
+  const totalOrdersCount = dbOn 
+    ? (customerOrdersTotal !== null && customerOrdersTotal > (enrichedCustomer?.total_orders || 0) 
+        ? customerOrdersTotal 
+        : (enrichedCustomer?.total_orders || selOrders.length))
+    : selOrders.length;
 
   const selRFM = enrichedCustomer ? (() => {
     const c = enrichedCustomer;
@@ -582,7 +654,8 @@ export function Customers({ dbOn, demoData, canExport, addLog }) {
             {[
               { id: 'overview', label: 'Tổng quan', icon: ic.eye },
               { id: 'persona', label: 'Chân dung KH', icon: ic.users },
-              { id: 'orders', label: `Lịch sử đơn (${selOrders.length})`, icon: ic.cart }
+              { id: 'orders', label: `Lịch sử đơn (${totalOrdersCount})`, icon: ic.cart },
+              { id: 'ai-analysis', label: 'AI Phân tích', icon: ic.sparkle }
             ].map(t => (
               <button
                 key={t.id}
@@ -855,7 +928,7 @@ export function Customers({ dbOn, demoData, canExport, addLog }) {
                   ))}
                 </select>
                 <span style={{ fontSize: 11, color: T.textMuted }}>
-                  {filteredOrders.length}/{selOrders.length} đơn
+                  {filteredOrders.length}/{totalOrdersCount} đơn
                 </span>
                 {hasOrderFilter && (
                   <button
@@ -876,7 +949,7 @@ export function Customers({ dbOn, demoData, canExport, addLog }) {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {filteredOrders.length === 0 && (
                   <div style={{ padding: 24, textAlign: 'center', color: T.textMuted, fontSize: 13 }}>
-                    {selOrders.length === 0
+                    {totalOrdersCount === 0
                       ? 'Không có đơn hàng'
                       : hasOrderFilter
                         ? 'Không có đơn hàng phù hợp với bộ lọc. Thử đổi khoảng ngày hoặc cửa hàng.'
@@ -940,6 +1013,378 @@ export function Customers({ dbOn, demoData, canExport, addLog }) {
                   );
                 })}
               </div>
+            </div>
+          )}
+
+          {/* Tab: AI Analysis */}
+          {detailTab === 'ai-analysis' && (
+            <div>
+              {loadingAiAnalysis && (
+                <div style={{ padding: 40, textAlign: 'center' }}>
+                  <div className="spin" style={{ width: 32, height: 32, margin: '0 auto 16px', borderWidth: 3 }} />
+                  <div style={{ fontSize: 14, fontWeight: 700, color: T.accent, marginBottom: 4 }}>AI đang phân tích khách hàng...</div>
+                  <div style={{ fontSize: 11, color: T.textSec }}>Đang tổng hợp insights và đề xuất</div>
+                </div>
+              )}
+
+              {aiAnalysisError && (
+                <div style={{ padding: 20, borderRadius: 10, background: T.danger + '15', border: `1px solid ${T.danger}30` }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                    <Icon d={ic.alert} s={16} c={T.danger} />
+                    <div style={{ fontSize: 13, fontWeight: 700, color: T.danger }}>Lỗi khi phân tích</div>
+                  </div>
+                  <div style={{ fontSize: 12, color: T.textSec }}>{aiAnalysisError}</div>
+                </div>
+              )}
+
+              {!loadingAiAnalysis && !aiAnalysisError && aiAnalysis && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  {/* Summary */}
+                  {aiAnalysis.summary && (
+                    <div style={{ padding: '16px 18px', borderRadius: 12, background: `linear-gradient(135deg,${T.accent}15,${T.purple}15)`, border: `1px solid ${T.accent}25` }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                        <Icon d={ic.sparkle} s={16} c={T.accent} />
+                        <div style={{ fontSize: 14, fontWeight: 700, color: T.accent }}>Tóm tắt</div>
+                      </div>
+                      <div style={{ fontSize: 13, color: T.text, lineHeight: 1.6 }}>{aiAnalysis.summary}</div>
+                    </div>
+                  )}
+
+                  {/* Insights */}
+                  {aiAnalysis.insights && aiAnalysis.insights.length > 0 && (
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
+                        <Icon d={ic.target} s={14} c={T.info} />
+                        <div style={{ fontSize: 13, fontWeight: 700 }}>Insights</div>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        {aiAnalysis.insights.map((insight, i) => {
+                          const typeColors = {
+                            opportunity: T.success,
+                            risk: T.danger,
+                            strength: T.accent,
+                            warning: T.warning
+                          };
+                          const color = typeColors[insight.type] || T.info;
+                          return (
+                            <div
+                              key={i}
+                              style={{
+                                padding: '12px 16px',
+                                borderRadius: 10,
+                                background: color + '10',
+                                border: `1px solid ${color}25`
+                              }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                                <Icon d={insight.type === 'risk' ? ic.alert : insight.type === 'opportunity' ? ic.trend : ic.target} s={12} c={color} />
+                                <div style={{ fontSize: 12, fontWeight: 700, color: color, textTransform: 'uppercase' }}>
+                                  {insight.type === 'opportunity' ? 'Cơ hội' : insight.type === 'risk' ? 'Rủi ro' : insight.type === 'strength' ? 'Điểm mạnh' : 'Cảnh báo'}
+                                </div>
+                              </div>
+                              <div style={{ fontSize: 13, fontWeight: 700, color: T.text, marginBottom: 4 }}>{insight.title}</div>
+                              <div style={{ fontSize: 12, color: T.textSec, lineHeight: 1.5 }}>{insight.description}</div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Recommendations */}
+                  {aiAnalysis.recommendations && aiAnalysis.recommendations.length > 0 && (
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
+                        <Icon d={ic.check} s={14} c={T.success} />
+                        <div style={{ fontSize: 13, fontWeight: 700 }}>Đề xuất</div>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        {aiAnalysis.recommendations.map((rec, i) => (
+                          <div
+                            key={i}
+                            style={{
+                              padding: '10px 14px',
+                              borderRadius: 8,
+                              background: T.success + '08',
+                              border: `1px solid ${T.success}20`,
+                              display: 'flex',
+                              alignItems: 'flex-start',
+                              gap: 8
+                            }}
+                          >
+                            <span style={{ fontSize: 12, fontWeight: 700, color: T.success, flexShrink: 0 }}>•</span>
+                            <div style={{ fontSize: 12, color: T.text, lineHeight: 1.5 }}>{rec}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Next Actions */}
+                  {aiAnalysis.next_actions && aiAnalysis.next_actions.length > 0 && (
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
+                        <Icon d={ic.play} s={14} c={T.accent} />
+                        <div style={{ fontSize: 13, fontWeight: 700 }}>Hành động tiếp theo</div>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        {aiAnalysis.next_actions.map((action, i) => (
+                          <div
+                            key={i}
+                            style={{
+                              padding: '10px 14px',
+                              borderRadius: 8,
+                              background: T.accent + '08',
+                              border: `1px solid ${T.accent}20`,
+                              display: 'flex',
+                              alignItems: 'flex-start',
+                              gap: 8
+                            }}
+                          >
+                            <span style={{ fontSize: 12, fontWeight: 700, color: T.accent, flexShrink: 0 }}>→</span>
+                            <div style={{ fontSize: 12, color: T.text, lineHeight: 1.5 }}>{action}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Personalized Recommendations */}
+                  {aiAnalysis.personalized_recommendations && (
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
+                        <Icon d={ic.cart} s={14} c={T.accent} />
+                        <div style={{ fontSize: 13, fontWeight: 700 }}>Gợi ý Sản phẩm Cá nhân Hoá</div>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                        {/* Frequently Bought */}
+                        {aiAnalysis.personalized_recommendations.frequently_bought && aiAnalysis.personalized_recommendations.frequently_bought.length > 0 && (
+                          <div>
+                            <div style={{ fontSize: 12, fontWeight: 700, color: T.text, marginBottom: 8 }}>Sản phẩm bạn hay mua</div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                              {aiAnalysis.personalized_recommendations.frequently_bought.map((item, i) => (
+                                <div
+                                  key={i}
+                                  style={{
+                                    padding: '10px 14px',
+                                    borderRadius: 8,
+                                    background: T.accent + '08',
+                                    border: `1px solid ${T.accent}20`
+                                  }}
+                                >
+                                  <div style={{ fontSize: 12, fontWeight: 700, color: T.text, marginBottom: 4 }}>{item.product}</div>
+                                  <div style={{ fontSize: 11, color: T.textSec, lineHeight: 1.4 }}>{item.reason}</div>
+                                  {item.last_purchase && (
+                                    <div style={{ fontSize: 10, color: T.textMuted, marginTop: 4 }}>Mua cuối: {item.last_purchase}</div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Today Suggestions */}
+                        {aiAnalysis.personalized_recommendations.today_suggestions && aiAnalysis.personalized_recommendations.today_suggestions.length > 0 && (
+                          <div>
+                            <div style={{ fontSize: 12, fontWeight: 700, color: T.text, marginBottom: 8 }}>Gợi ý hôm nay cho bạn</div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                              {aiAnalysis.personalized_recommendations.today_suggestions.map((item, i) => (
+                                <div
+                                  key={i}
+                                  style={{
+                                    padding: '10px 14px',
+                                    borderRadius: 8,
+                                    background: T.info + '08',
+                                    border: `1px solid ${T.info}20`
+                                  }}
+                                >
+                                  <div style={{ fontSize: 12, fontWeight: 700, color: T.text, marginBottom: 4 }}>{item.product}</div>
+                                  <div style={{ fontSize: 11, color: T.textSec, lineHeight: 1.4 }}>{item.reason}</div>
+                                  {item.context && (
+                                    <div style={{ fontSize: 10, color: T.info, marginTop: 4, fontStyle: 'italic' }}>{item.context}</div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Cross-sell */}
+                        {aiAnalysis.personalized_recommendations.cross_sell && aiAnalysis.personalized_recommendations.cross_sell.length > 0 && (
+                          <div>
+                            <div style={{ fontSize: 12, fontWeight: 700, color: T.text, marginBottom: 8 }}>Bạn có thể cần thêm</div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                              {aiAnalysis.personalized_recommendations.cross_sell.map((item, i) => (
+                                <div
+                                  key={i}
+                                  style={{
+                                    padding: '10px 14px',
+                                    borderRadius: 8,
+                                    background: T.success + '08',
+                                    border: `1px solid ${T.success}20`
+                                  }}
+                                >
+                                  <div style={{ fontSize: 12, fontWeight: 700, color: T.text, marginBottom: 4 }}>{item.product}</div>
+                                  <div style={{ fontSize: 11, color: T.textSec, lineHeight: 1.4 }}>{item.reason}</div>
+                                  {item.complementary_to && (
+                                    <div style={{ fontSize: 10, color: T.success, marginTop: 4 }}>Bổ sung cho: {item.complementary_to}</div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* AI-Driven Promotions */}
+                  {aiAnalysis.ai_promotions && aiAnalysis.ai_promotions.length > 0 && (
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
+                        <Icon d={ic.gift} s={14} c={T.warning} />
+                        <div style={{ fontSize: 13, fontWeight: 700 }}>Chương Trình Khuyến Mãi Tự Động</div>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        {aiAnalysis.ai_promotions.map((promo, i) => {
+                          const typeLabels = {
+                            cycle_based: 'Chu kỳ mua',
+                            churn_prevention: 'Ngăn chặn rời bỏ',
+                            segment_based: 'Phân khúc',
+                            new_customer: 'Khách hàng mới'
+                          };
+                          return (
+                            <div
+                              key={i}
+                              style={{
+                                padding: '12px 16px',
+                                borderRadius: 10,
+                                background: T.warning + '10',
+                                border: `1px solid ${T.warning}25`
+                              }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                                <Icon d={ic.gift} s={12} c={T.warning} />
+                                <div style={{ fontSize: 11, fontWeight: 700, color: T.warning, textTransform: 'uppercase' }}>
+                                  {typeLabels[promo.type] || promo.type}
+                                </div>
+                              </div>
+                              <div style={{ fontSize: 13, fontWeight: 700, color: T.text, marginBottom: 4 }}>{promo.title}</div>
+                              <div style={{ fontSize: 12, color: T.textSec, lineHeight: 1.5, marginBottom: 6 }}>{promo.description}</div>
+                              {promo.trigger && (
+                                <div style={{ fontSize: 11, color: T.textMuted, marginBottom: 4 }}>
+                                  <span style={{ fontWeight: 600 }}>Kích hoạt:</span> {promo.trigger}
+                                </div>
+                              )}
+                              {promo.suggested_offer && (
+                                <div style={{ fontSize: 12, fontWeight: 700, color: T.warning, marginBottom: 4 }}>
+                                  Đề xuất: {promo.suggested_offer}
+                                </div>
+                              )}
+                              {promo.channel && (
+                                <div style={{ fontSize: 10, color: T.textMuted }}>
+                                  Kênh: {promo.channel}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Churn Prevention */}
+                  {aiAnalysis.churn_prevention && (
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
+                        <Icon d={ic.shield} s={14} c={T.danger} />
+                        <div style={{ fontSize: 13, fontWeight: 700 }}>Dự Đoán Hành Vi & Ngăn Chặn Khách Rời Bỏ</div>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                        {/* Risk Level */}
+                        {aiAnalysis.churn_prevention.risk_level && (
+                          <div style={{ padding: '12px 16px', borderRadius: 10, background: T.danger + '10', border: `1px solid ${T.danger}25` }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                              <Icon d={ic.alert} s={12} c={T.danger} />
+                              <div style={{ fontSize: 12, fontWeight: 700, color: T.danger, textTransform: 'uppercase' }}>
+                                Mức độ rủi ro: {aiAnalysis.churn_prevention.risk_level === 'high' ? 'CAO' : aiAnalysis.churn_prevention.risk_level === 'medium' ? 'TRUNG BÌNH' : 'THẤP'}
+                              </div>
+                            </div>
+                            {aiAnalysis.churn_prevention.risk_factors && aiAnalysis.churn_prevention.risk_factors.length > 0 && (
+                              <div style={{ marginTop: 8 }}>
+                                <div style={{ fontSize: 11, fontWeight: 700, color: T.text, marginBottom: 6 }}>Yếu tố rủi ro:</div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                  {aiAnalysis.churn_prevention.risk_factors.map((factor, i) => (
+                                    <div key={i} style={{ fontSize: 11, color: T.textSec, paddingLeft: 12, position: 'relative' }}>
+                                      <span style={{ position: 'absolute', left: 0 }}>•</span> {factor}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Prevention Strategy */}
+                        {aiAnalysis.churn_prevention.prevention_strategy && aiAnalysis.churn_prevention.prevention_strategy.length > 0 && (
+                          <div>
+                            <div style={{ fontSize: 12, fontWeight: 700, color: T.text, marginBottom: 8 }}>Chiến lược ngăn chặn</div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                              {aiAnalysis.churn_prevention.prevention_strategy.map((strategy, i) => (
+                                <div
+                                  key={i}
+                                  style={{
+                                    padding: '10px 14px',
+                                    borderRadius: 8,
+                                    background: T.success + '08',
+                                    border: `1px solid ${T.success}20`
+                                  }}
+                                >
+                                  <div style={{ fontSize: 12, color: T.text, lineHeight: 1.5 }}>{strategy}</div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Next Purchase Prediction */}
+                        {aiAnalysis.churn_prevention.next_purchase_prediction && (
+                          <div style={{ padding: '12px 16px', borderRadius: 10, background: T.info + '10', border: `1px solid ${T.info}25` }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                              <Icon d={ic.clock} s={12} c={T.info} />
+                              <div style={{ fontSize: 12, fontWeight: 700, color: T.info }}>Dự đoán mua tiếp theo</div>
+                            </div>
+                            {aiAnalysis.churn_prevention.next_purchase_prediction.predicted_date && (
+                              <div style={{ fontSize: 13, fontWeight: 700, color: T.text, marginBottom: 4 }}>
+                                Ngày dự kiến: {aiAnalysis.churn_prevention.next_purchase_prediction.predicted_date}
+                              </div>
+                            )}
+                            {aiAnalysis.churn_prevention.next_purchase_prediction.confidence && (
+                              <div style={{ fontSize: 11, color: T.textSec, marginBottom: 8 }}>
+                                Độ tin cậy: {aiAnalysis.churn_prevention.next_purchase_prediction.confidence === 'high' ? 'Cao' : aiAnalysis.churn_prevention.next_purchase_prediction.confidence === 'medium' ? 'Trung bình' : 'Thấp'}
+                              </div>
+                            )}
+                            {aiAnalysis.churn_prevention.next_purchase_prediction.suggested_products && aiAnalysis.churn_prevention.next_purchase_prediction.suggested_products.length > 0 && (
+                              <div>
+                                <div style={{ fontSize: 11, fontWeight: 700, color: T.text, marginBottom: 4 }}>Sản phẩm đề xuất:</div>
+                                <div style={{ fontSize: 11, color: T.textSec }}>
+                                  {aiAnalysis.churn_prevention.next_purchase_prediction.suggested_products.join(', ')}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {!loadingAiAnalysis && !aiAnalysisError && !aiAnalysis && (
+                <div style={{ padding: 40, textAlign: 'center' }}>
+                  <div style={{ fontSize: 13, color: T.textSec }}>Chưa có dữ liệu phân tích</div>
+                </div>
+              )}
             </div>
           )}
             </>

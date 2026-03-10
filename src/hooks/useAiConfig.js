@@ -9,6 +9,8 @@ export function useAiConfig() {
   const [apiEndpoint, setApiEndpoint] = useState('');
   const [aiLoading, setAiLoading] = useState(true);
   const [aiSaving, setAiSaving] = useState(false);
+  const [aiTesting, setAiTesting] = useState(false);
+  const [aiTestError, setAiTestError] = useState('');
 
   useEffect(() => {
     loadAiConfigs();
@@ -109,6 +111,27 @@ export function useAiConfig() {
     }
   };
 
+  const handleTestAi = async () => {
+    try {
+      setAiTesting(true);
+      setAiTestError('');
+      
+      // Use current apiKey (can be masked, backend will fetch actual key from DB)
+      const response = await aiApi.testConnection(selectedModel, apiKey || '', apiEndpoint);
+      
+      if (response.success) {
+        setAiTestError('');
+        alert('Kết nối thành công!');
+      } else {
+        setAiTestError(response.error || 'Kết nối thất bại');
+      }
+    } catch (error) {
+      setAiTestError(error.message || 'Kết nối thất bại');
+    } finally {
+      setAiTesting(false);
+    }
+  };
+
   const currentModel = AI_MODELS.find(m => m.id === selectedModel) || AI_MODELS[0];
 
   return {
@@ -121,8 +144,11 @@ export function useAiConfig() {
     setApiEndpoint,
     aiLoading,
     aiSaving,
+    aiTesting,
+    aiTestError,
     currentModel,
     handleSaveAi,
+    handleTestAi,
     loadAiConfigs
   };
 }
