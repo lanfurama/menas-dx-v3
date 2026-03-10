@@ -12,6 +12,12 @@ export function transformSalesData(dbOn, apiData, error, demoData) {
         discount: Number(c.discount) ?? 0,
         orders: parseInt(c.orders, 10) || 0
       })),
+      storePerf: (apiData.storePerf || []).map(s => ({
+        name: s.name || 'N/A',
+        revenue: Number(s.revenue) ?? 0,
+        discount: Number(s.discount) ?? 0,
+        orders: parseInt(s.orders, 10) || 0
+      })),
       payments: apiPayments,
       hourly: (apiData.hourly || []).length
         ? apiData.hourly
@@ -44,6 +50,12 @@ export function transformSalesData(dbOn, apiData, error, demoData) {
   ];
   return {
     catPerf: (d.catPerf || []).map(c => ({ ...c, discount: c.discount ?? 0 })),
+    storePerf: (d.topStores || []).map(s => ({
+      name: s.store_name || 'N/A',
+      revenue: s.revenue ?? 0,
+      discount: 0,
+      orders: s.orders ?? 0
+    })),
     payments: d.payments || [],
     hourly: d.hourly || Array.from({ length: 24 }, (_, i) => ({ hour: `${i}h`, orders: 0 })),
     discount: { total: demoDiscount, gross_revenue: demoGross, by_rate: demoByRate, by_voucher: demoByVoucher },

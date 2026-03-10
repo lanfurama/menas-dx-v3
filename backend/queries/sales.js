@@ -30,6 +30,19 @@ export const getTopCategories = (params = {}) => {
   `, values };
 };
 
+export const getTopStores = (params = {}) => {
+  const { where, values } = buildWhere(params);
+  return { text: `
+    SELECT COALESCE("store_name", 'N/A') AS name,
+      COALESCE(SUM("ThanhTienBan"), 0) AS revenue,
+      COALESCE(SUM("TienGiamGia"), 0) AS discount,
+      COUNT(DISTINCT "MaHD") AS orders
+    FROM public.datamart_transaction WHERE ${where}
+    GROUP BY "store_name"
+    ORDER BY revenue DESC LIMIT 10
+  `, values };
+};
+
 export const getPaymentsByMethod = (params = {}) => {
   const { where, values } = buildWhere(params);
   return { text: `

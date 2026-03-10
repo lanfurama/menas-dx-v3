@@ -18,6 +18,7 @@ import { Sales } from './pages/Sales.jsx';
 import { Marketing } from './pages/Marketing.jsx';
 import { Zalo } from './pages/Zalo.jsx';
 import { Predictions } from './pages/Predictions.jsx';
+import { AIChat } from './pages/AIChat.jsx';
 import { Datamap } from './pages/Datamap.jsx';
 import { ActivityLog } from './pages/ActivityLog.jsx';
 import { UserManagement } from './pages/UserManagement.jsx';
@@ -174,6 +175,7 @@ export default function MenasDX() {
       case "predictions":
         return ok ? <Predictions dbOn={dbOn} demoData={data} canExport={canExport} addLog={addLog} /> : <NoAccess />;
       case "ai_chat":
+        return ok ? <AIChat dbOn={dbOn} demoData={data} addLog={addLog} activityLog={activityLog} /> : <NoAccess />;
       case "report":
       case "datamap":
         return ok ? <Datamap /> : <NoAccess />;

@@ -18,11 +18,15 @@ const getDefaultFilter = () => {
   const lastPurchaseFrom = sixtyDaysAgo.toISOString().split('T')[0];
   const lastPurchaseTo = today.toISOString().split('T')[0];
   
+  // Ngày kể từ lần mua cuối: từ 0 đến 60 ngày trước
+  const daysSinceFrom = today.toISOString().split('T')[0];
+  const daysSinceTo = sixtyDaysAgo.toISOString().split('T')[0];
+  
   return {
     tiers: ['Platinum', 'Gold'], segments: ['Champions', 'Loyal'], categories: [],
     spendMin: '20000000', spendMax: '1000000000', ordersMin: '2', ordersMax: '1000',
     freqMin: '2', freqMax: '20', avgBasketMin: '100000', avgBasketMax: '5000000',
-    daysSinceFrom: '', daysSinceTo: '',
+    daysSinceFrom, daysSinceTo,
     hasZalo: 'all', zaloFollow: 'all',
     stores: [], txnStores: [],
     lastPurchaseFrom, lastPurchaseTo, lastTxnAmtMin: '50000', lastTxnAmtMax: '10000000',

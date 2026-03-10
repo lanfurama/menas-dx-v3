@@ -952,16 +952,18 @@ router.get('/datamart/sales', async (req, res) => {
       vouchersList = (vRes.rows || []).map(r => r.voucher_code).filter(Boolean);
     } catch (_) { /* Cột MaVoucher/LoaiVoucher/TenVoucher có thể không tồn tại */ }
 
-    const [catQ, hourlyQ, discQ, rateQ, storesQ, catsQ] = [
+    const [catQ, storeQ, hourlyQ, discQ, rateQ, storesQ, catsQ] = [
       salesQueries.getTopCategories(params),
+      salesQueries.getTopStores(params),
       salesQueries.getOrdersByHour(params),
       salesQueries.getDiscountSummary(params),
       salesQueries.getDiscountByRate(params),
       salesQueries.getStoresForSales(),
       salesQueries.getCategoriesForSales()
     ];
-    const [catPerfResult, hourlyResult, discResult, rateResult, storesResult, categoriesResult] = await Promise.all([
+    const [catPerfResult, storePerfResult, hourlyResult, discResult, rateResult, storesResult, categoriesResult] = await Promise.all([
       externalPool.query(catQ),
+      externalPool.query(storeQ),
       externalPool.query(hourlyQ),
       externalPool.query(discQ),
       externalPool.query(rateQ),
@@ -1009,6 +1011,12 @@ router.get('/datamart/sales', async (req, res) => {
         revenue: Number(c.revenue) || 0,
         discount: Number(c.discount) || 0,
         orders: parseInt(c.orders) || 0
+      })),
+      storePerf: (storePerfResult.rows || []).map(s => ({
+        name: s.name || 'N/A',
+        revenue: Number(s.revenue) || 0,
+        discount: Number(s.discount) || 0,
+        orders: parseInt(s.orders) || 0
       })),
       payments: paymentsRows.map(p => ({
         method: p.method || 'Khác',

@@ -15,7 +15,6 @@ import { useBreakpoint } from '../hooks/useBreakpoint.js';
 const tt = tooltipStyle;
 
 export function Sales({ dbOn, demoData, canExport }) {
-  const [showFilter, setShowFilter] = useState(false);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [store, setStore] = useState('all');
@@ -33,7 +32,7 @@ export function Sales({ dbOn, demoData, canExport }) {
   }, [dateFrom, dateTo, store, category, voucher]);
 
   const { data: apiData, loading, error } = useSales(dbOn, filterParams);
-  const { catPerf, payments, hourly, discount, stores, categories, vouchers } = useMemo(
+  const { catPerf, storePerf, payments, hourly, discount, stores, categories, vouchers } = useMemo(
     () => transformSalesData(dbOn, apiData, error, demoData),
     [dbOn, apiData, error, demoData]
   );
@@ -60,65 +59,55 @@ export function Sales({ dbOn, demoData, canExport }) {
   return (
     <div className="fu">
       {/* Filter bar */}
-      <div className="card" style={{ marginBottom: 14 }}>
-        <div style={{ display: 'flex', gap: 8, marginBottom: showFilter ? 12 : 0, alignItems: 'center', flexWrap: 'wrap' }}>
-          <button
-            className={`btn btn-sm ${showFilter || hasActiveFilter ? 'btn-p' : 'btn-g'}`}
-            onClick={() => setShowFilter(!showFilter)}
-          >
-            <Icon d={ic.filter} s={12} /> Lọc {hasActiveFilter ? '(*)' : ''}
-          </button>
+      <div style={{ padding: 14, borderRadius: 10, background: T.surfaceAlt, border: `1px solid ${T.cardBorder}`, marginBottom: 14 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: T.accent }}>Bộ lọc</span>
+          {hasActiveFilter && (
+            <button className="btn btn-g btn-sm" onClick={resetFilter} style={{ padding: '3px 10px', fontSize: 10 }}>
+              <Icon d={ic.x} s={10} /> Xoá lọc
+            </button>
+          )}
         </div>
-        {showFilter && (
-          <div style={{ padding: 14, borderRadius: 10, background: T.surfaceAlt, border: `1px solid ${T.cardBorder}` }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-              <span style={{ fontSize: 12, fontWeight: 700, color: T.accent }}>Bộ lọc</span>
-              <button className="btn btn-g btn-sm" onClick={resetFilter} style={{ padding: '3px 10px', fontSize: 10 }}>
-                <Icon d={ic.x} s={10} /> Xoá lọc
-              </button>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr 1fr 1fr', gap: 10 }}>
+          <div>
+            <span className="label-sm">Từ ngày</span>
+            <input type="date" className="inp" style={{ fontSize: 12 }} value={dateFrom} onChange={e => setDateFrom(e.target.value)} />
+          </div>
+          <div>
+            <span className="label-sm">Đến ngày</span>
+            <input type="date" className="inp" style={{ fontSize: 12 }} value={dateTo} onChange={e => setDateTo(e.target.value)} />
+          </div>
+          <div>
+            <span className="label-sm">Cửa hàng</span>
+            <select className="inp" value={store} onChange={e => setStore(e.target.value)}>
+              <option value="all">Tất cả</option>
+              {(stores || []).map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+          <div>
+            <span className="label-sm">Danh mục</span>
+            <select className="inp" value={category} onChange={e => setCategory(e.target.value)}>
+              <option value="all">Tất cả</option>
+              {(categories || []).map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+          {vouchers?.length > 0 && (
+            <div>
+              <span className="label-sm">Mã giảm giá</span>
+              <select className="inp" value={voucher} onChange={e => setVoucher(e.target.value)}>
+                <option value="all">Tất cả</option>
+                {vouchers.map(v => <option key={v} value={v}>{v}</option>)}
+              </select>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr 1fr 1fr', gap: 10 }}>
-              <div>
-                <span className="label-sm">Từ ngày</span>
-                <input type="date" className="inp" style={{ fontSize: 12 }} value={dateFrom} onChange={e => setDateFrom(e.target.value)} />
-              </div>
-              <div>
-                <span className="label-sm">Đến ngày</span>
-                <input type="date" className="inp" style={{ fontSize: 12 }} value={dateTo} onChange={e => setDateTo(e.target.value)} />
-              </div>
-              <div>
-                <span className="label-sm">Cửa hàng</span>
-                <select className="inp" value={store} onChange={e => setStore(e.target.value)}>
-                  <option value="all">Tất cả</option>
-                  {(stores || []).map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
-              </div>
-              <div>
-                <span className="label-sm">Danh mục</span>
-                <select className="inp" value={category} onChange={e => setCategory(e.target.value)}>
-                  <option value="all">Tất cả</option>
-                  {(categories || []).map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-              </div>
-              {vouchers?.length > 0 && (
-                <div>
-                  <span className="label-sm">Mã giảm giá</span>
-                  <select className="inp" value={voucher} onChange={e => setVoucher(e.target.value)}>
-                    <option value="all">Tất cả</option>
-                    {vouchers.map(v => <option key={v} value={v}>{v}</option>)}
-                  </select>
-                </div>
-              )}
-            </div>
-            {hasActiveFilter && (
-              <div style={{ marginTop: 10, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                {dateFrom && <span className="badge" style={{ background: T.accent + '18', color: T.accent }}>Từ {dateFrom} <span style={{ cursor: 'pointer', marginLeft: 4 }} onClick={() => setDateFrom('')}>x</span></span>}
-                {dateTo && <span className="badge" style={{ background: T.accent + '18', color: T.accent }}>Đến {dateTo} <span style={{ cursor: 'pointer', marginLeft: 4 }} onClick={() => setDateTo('')}>x</span></span>}
-                {store !== 'all' && <span className="badge" style={{ background: T.info + '18', color: T.info }}>{store} <span style={{ cursor: 'pointer', marginLeft: 4 }} onClick={() => setStore('all')}>x</span></span>}
-                {category !== 'all' && <span className="badge" style={{ background: T.success + '18', color: T.success }}>{category} <span style={{ cursor: 'pointer', marginLeft: 4 }} onClick={() => setCategory('all')}>x</span></span>}
-                {voucher !== 'all' && <span className="badge" style={{ background: T.purple + '18', color: T.purple }}>{voucher} <span style={{ cursor: 'pointer', marginLeft: 4 }} onClick={() => setVoucher('all')}>x</span></span>}
-              </div>
-            )}
+          )}
+        </div>
+        {hasActiveFilter && (
+          <div style={{ marginTop: 10, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {dateFrom && <span className="badge" style={{ background: T.accent + '18', color: T.accent }}>Từ {dateFrom} <span style={{ cursor: 'pointer', marginLeft: 4 }} onClick={() => setDateFrom('')}>x</span></span>}
+            {dateTo && <span className="badge" style={{ background: T.accent + '18', color: T.accent }}>Đến {dateTo} <span style={{ cursor: 'pointer', marginLeft: 4 }} onClick={() => setDateTo('')}>x</span></span>}
+            {store !== 'all' && <span className="badge" style={{ background: T.info + '18', color: T.info }}>{store} <span style={{ cursor: 'pointer', marginLeft: 4 }} onClick={() => setStore('all')}>x</span></span>}
+            {category !== 'all' && <span className="badge" style={{ background: T.success + '18', color: T.success }}>{category} <span style={{ cursor: 'pointer', marginLeft: 4 }} onClick={() => setCategory('all')}>x</span></span>}
+            {voucher !== 'all' && <span className="badge" style={{ background: T.purple + '18', color: T.purple }}>{voucher} <span style={{ cursor: 'pointer', marginLeft: 4 }} onClick={() => setVoucher('all')}>x</span></span>}
           </div>
         )}
       </div>
@@ -133,10 +122,21 @@ export function Sales({ dbOn, demoData, canExport }) {
             />
           </Section>
           <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={catPerf} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" stroke={T.cardBorder} />
-              <XAxis type="number" stroke={T.textMuted} fontSize={11} tickFormatter={(v) => formatValue(v)} />
-              <YAxis type="category" dataKey="name" stroke={T.textMuted} fontSize={11} width={70} />
+            <PieChart>
+              <Pie
+                data={catPerf}
+                cx="50%"
+                cy="50%"
+                innerRadius={50}
+                outerRadius={90}
+                paddingAngle={4}
+                dataKey="revenue"
+                nameKey="name"
+              >
+                {catPerf.map((_, i) => (
+                  <Cell key={i} fill={CL[i % CL.length]} />
+                ))}
+              </Pie>
               <Tooltip {...tt} formatter={(v) => formatValue(v)} content={({ active, payload }) => {
                 if (!active || !payload?.[0]) return null;
                 const d = payload[0].payload;
@@ -149,39 +149,10 @@ export function Sales({ dbOn, demoData, canExport }) {
                   </div>
                 );
               }} />
-              <Bar dataKey="revenue" radius={[0, 6, 6, 0]} name="Doanh thu">
-                {catPerf.map((_, i) => (
-                  <Cell key={i} fill={CL[i % CL.length]} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-
-        {(payments.length > 0 || !dbOn) && (
-        <div className="card">
-          <Section icon={ic.gift} title="Thanh toán" sql={!!dbOn} />
-          <ResponsiveContainer width="100%" height={170}>
-            <PieChart>
-              <Pie
-                data={payments}
-                cx="50%"
-                cy="50%"
-                innerRadius={42}
-                outerRadius={68}
-                paddingAngle={4}
-                dataKey="amount"
-                nameKey="method"
-              >
-                {payments.map((_, i) => (
-                  <Cell key={i} fill={CL[i % CL.length]} />
-                ))}
-              </Pie>
-              <Tooltip {...tt} formatter={(v) => formatValue(v)} />
             </PieChart>
           </ResponsiveContainer>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
-            {payments.map((p, i) => (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center', marginTop: 8 }}>
+            {catPerf.map((c, i) => (
               <span key={i} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10 }}>
                 <span
                   style={{
@@ -192,13 +163,111 @@ export function Sales({ dbOn, demoData, canExport }) {
                     display: 'inline-block'
                   }}
                 />
-                {p.method}
+                {c.name}
+              </span>
+            ))}
+          </div>
+        </div>
+
+        {(storePerf.length > 0 || !dbOn) && (
+        <div className="card">
+          <Section icon={ic.map} title="Doanh thu theo cửa hàng" sql={!!dbOn}>
+            <ExportBtn
+              canExport={canExport}
+              data={storePerf.map((s) => ({ CuaHang: s.name, DoanhThu: s.revenue, GiamGia: s.discount || 0, SoDon: s.orders }))}
+              filename="sales_stores"
+            />
+          </Section>
+          <ResponsiveContainer width="100%" height={220}>
+            <PieChart>
+              <Pie
+                data={storePerf}
+                cx="50%"
+                cy="50%"
+                innerRadius={50}
+                outerRadius={90}
+                paddingAngle={4}
+                dataKey="revenue"
+                nameKey="name"
+              >
+                {storePerf.map((_, i) => (
+                  <Cell key={i} fill={CL[i % CL.length]} />
+                ))}
+              </Pie>
+              <Tooltip {...tt} formatter={(v) => formatValue(v)} content={({ active, payload }) => {
+                if (!active || !payload?.[0]) return null;
+                const d = payload[0].payload;
+                return (
+                  <div style={{ ...tt.contentStyle, padding: 10 }}>
+                    <div style={{ fontWeight: 700, marginBottom: 4 }}>{d.name}</div>
+                    <div>Doanh thu: {formatValue(d.revenue)}</div>
+                    {d.discount > 0 && <div style={{ color: T.success }}>Giảm giá: {formatValue(d.discount)}</div>}
+                    <div>Đơn: {d.orders}</div>
+                  </div>
+                );
+              }} />
+            </PieChart>
+          </ResponsiveContainer>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center', marginTop: 8 }}>
+            {storePerf.map((s, i) => (
+              <span key={i} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10 }}>
+                <span
+                  style={{
+                    width: 7,
+                    height: 7,
+                    borderRadius: '50%',
+                    background: CL[i % CL.length],
+                    display: 'inline-block'
+                  }}
+                />
+                {s.name}
               </span>
             ))}
           </div>
         </div>
         )}
       </div>
+
+      {(payments.length > 0 || !dbOn) && (
+      <div className="card" style={{ marginBottom: 14 }}>
+        <Section icon={ic.gift} title="Thanh toán" sql={!!dbOn} />
+        <ResponsiveContainer width="100%" height={170}>
+          <PieChart>
+            <Pie
+              data={payments}
+              cx="50%"
+              cy="50%"
+              innerRadius={42}
+              outerRadius={68}
+              paddingAngle={4}
+              dataKey="amount"
+              nameKey="method"
+            >
+              {payments.map((_, i) => (
+                <Cell key={i} fill={CL[i % CL.length]} />
+              ))}
+            </Pie>
+            <Tooltip {...tt} formatter={(v) => formatValue(v)} />
+          </PieChart>
+        </ResponsiveContainer>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
+          {payments.map((p, i) => (
+            <span key={i} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10 }}>
+              <span
+                style={{
+                  width: 7,
+                  height: 7,
+                  borderRadius: '50%',
+                  background: CL[i % CL.length],
+                  display: 'inline-block'
+                }}
+              />
+              {p.method}
+            </span>
+          ))}
+        </div>
+      </div>
+      )}
 
       <div className="card">
         <Section icon={ic.clock} title="Đơn hàng theo giờ" sql={!!dbOn} />

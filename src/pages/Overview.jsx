@@ -79,11 +79,22 @@ export function Overview({ dbOn, demoData, canExport, refetchKey }) {
   const isDaily = ['today', 'yesterday', '7d', '30d', '90d', 'custom'].includes(timePeriod);
   const chartXKey = isDaily ? 'label' : 'month';
   
-  const { totalRev, totalOrders } = useMemo(() => {
+  const { totalRev, totalOrders, filteredAOV, filteredTotalCustomers } = useMemo(() => {
     const rev = filteredRevenue.reduce((s, r) => s + (r.revenue || 0), 0) * (isDaily ? 1e6 : 1e6);
     const ord = filteredRevenue.reduce((s, r) => s + (r.orders || 0), 0);
-    return { totalRev: rev, totalOrders: ord };
-  }, [filteredRevenue, isDaily]);
+    
+    // Calculate AOV from filtered data
+    const aov = ord > 0 ? rev / ord : 0;
+    
+    // Calculate total customers proportionally based on orders ratio
+    // Get total orders from all available data (not filtered)
+    const allRevenue = isDaily ? (demoData?.revenueDaily || []) : (dash.revenueByMonth || []);
+    const totalOrdersAll = allRevenue.reduce((s, r) => s + (r.orders || 0), 0) || dash.overview.total_orders || 1;
+    const ordersRatio = totalOrdersAll > 0 ? ord / totalOrdersAll : 0;
+    const totalCust = Math.round((dash.overview.total_customers || 0) * ordersRatio);
+    
+    return { totalRev: rev, totalOrders: ord, filteredAOV: aov, filteredTotalCustomers: totalCust };
+  }, [filteredRevenue, isDaily, dash.overview, dash.revenueByMonth, demoData?.revenueDaily]);
 
   if (dbOn && loading) {
     return (
@@ -221,7 +232,15 @@ export function Overview({ dbOn, demoData, canExport, refetchKey }) {
         )}
       </div>
 
-      <MetricsGrid overview={dash.overview} totalRev={totalRev} totalOrders={totalOrders} />
+      <MetricsGrid 
+        overview={{
+          ...dash.overview,
+          total_customers: filteredTotalCustomers,
+          avg_order_value: filteredAOV
+        }} 
+        totalRev={totalRev} 
+        totalOrders={totalOrders} 
+      />
 
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '5fr 3fr', gap: 12, marginBottom: 16 }}>
         <RevenueChart data={filteredRevenue} dbOn={dbOn} showYoY={showYoY} chartXKey={chartXKey} />

@@ -95,6 +95,10 @@ export const aiApi = {
     method: 'POST',
     body: JSON.stringify({ phone, customerData }),
   }),
+  chat: (data) => request('/ai/chat', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }),
 };
 
 export const zaloApi = {

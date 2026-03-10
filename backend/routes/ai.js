@@ -862,4 +862,173 @@ Lưu ý:
   }
 });
 
+// AI Chat endpoint
+router.post('/chat', async (req, res) => {
+  try {
+    const { modelId, messages, systemPrompt } = req.body;
+    
+    if (!modelId) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Model ID là bắt buộc' 
+      });
+    }
+
+    if (!messages || !Array.isArray(messages) || messages.length === 0) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Messages là bắt buộc và phải là array' 
+      });
+    }
+
+    // Get AI config from database
+    const configResult = await configPool.query(
+      'SELECT * FROM ai_config WHERE model_id = $1 AND is_active = true LIMIT 1',
+      [modelId]
+    );
+    
+    if (configResult.rows.length === 0) {
+      return res.status(400).json({ 
+        success: false, 
+        error: `Chưa cấu hình AI model: ${modelId}` 
+      });
+    }
+    
+    const aiConfig = configResult.rows[0];
+    const { api_key, api_endpoint } = aiConfig;
+    
+    if (!api_key || api_key.includes('***')) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'API key chưa được cấu hình' 
+      });
+    }
+
+    let aiResponse;
+    let aiText;
+
+    // Call AI API based on model
+    switch (modelId) {
+      case 'claude': {
+        const response = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': api_key,
+            'anthropic-version': '2023-06-01'
+          },
+          body: JSON.stringify({
+            model: 'claude-sonnet-4-20250514',
+            max_tokens: 2000,
+            system: systemPrompt || 'Bạn là AI Assistant cho MENAS DX - hệ thống Customer 360° Intelligence Platform.',
+            messages: messages.map(m => ({
+              role: m.role,
+              content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content)
+            }))
+          })
+        });
+        
+        if (!response.ok) {
+          const error = await response.json().catch(() => ({ error: { message: response.statusText } }));
+          throw new Error(error.error?.message || `HTTP ${response.status}`);
+        }
+        
+        aiResponse = await response.json();
+        aiText = aiResponse.content?.map(b => b.text || '').join('\n') || 'Xin lỗi, không thể tạo phản hồi.';
+        break;
+      }
+      
+      case 'gpt4': {
+        const response = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${api_key}`
+          },
+          body: JSON.stringify({
+            model: 'gpt-4o',
+            messages: [
+              { role: 'system', content: systemPrompt || 'Bạn là AI Assistant cho MENAS DX.' },
+              ...messages.map(m => ({
+                role: m.role,
+                content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content)
+              }))
+            ],
+            max_tokens: 2000
+          })
+        });
+        
+        if (!response.ok) {
+          const error = await response.json().catch(() => ({ error: { message: response.statusText } }));
+          throw new Error(error.error?.message || `HTTP ${response.status}`);
+        }
+        
+        aiResponse = await response.json();
+        aiText = aiResponse.choices?.[0]?.message?.content || 'Xin lỗi, không thể tạo phản hồi.';
+        break;
+      }
+      
+      case 'gemini': {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${api_key}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [
+              { role: 'user', parts: [{ text: (systemPrompt || '') + '\n\n' + messages.map(m => `${m.role}: ${typeof m.content === 'string' ? m.content : JSON.stringify(m.content)}`).join('\n') }] }
+            ]
+          })
+        });
+        
+        if (!response.ok) {
+          const error = await response.json().catch(() => ({ error: { message: response.statusText } }));
+          throw new Error(error.error?.message || `HTTP ${response.status}`);
+        }
+        
+        aiResponse = await response.json();
+        aiText = aiResponse.candidates?.[0]?.content?.parts?.[0]?.text || 'Xin lỗi, không thể tạo phản hồi.';
+        break;
+      }
+      
+      case 'local': {
+        const endpoint = api_endpoint || 'http://localhost:11434/api/generate';
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: 'llama3',
+            prompt: (systemPrompt || '') + '\n\n' + messages.map(m => `${m.role}: ${typeof m.content === 'string' ? m.content : JSON.stringify(m.content)}`).join('\n'),
+            stream: false
+          })
+        });
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        
+        aiResponse = await response.json();
+        aiText = aiResponse.response || 'Xin lỗi, không thể tạo phản hồi.';
+        break;
+      }
+      
+      default:
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Model không được hỗ trợ' 
+        });
+    }
+    
+    res.json({
+      success: true,
+      text: aiText,
+      model: modelId
+    });
+  } catch (error) {
+    console.error('AI Chat error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message || 'Lỗi khi gửi tin nhắn đến AI' 
+    });
+  }
+});
+
 export { router as aiRouter };

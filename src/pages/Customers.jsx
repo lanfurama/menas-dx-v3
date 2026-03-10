@@ -1038,26 +1038,83 @@ export function Customers({ dbOn, demoData, canExport, addLog }) {
               )}
 
               {!loadingAiAnalysis && !aiAnalysisError && aiAnalysis && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                  {/* Summary */}
-                  {aiAnalysis.summary && (
-                    <div style={{ padding: '16px 18px', borderRadius: 12, background: `linear-gradient(135deg,${T.accent}15,${T.purple}15)`, border: `1px solid ${T.accent}25` }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                        <Icon d={ic.sparkle} s={16} c={T.accent} />
-                        <div style={{ fontSize: 14, fontWeight: 700, color: T.accent }}>Tóm tắt</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  {/* Visual Metrics Cards */}
+                  <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: 10, marginBottom: 4 }}>
+                    {/* Risk Level Card */}
+                    {aiAnalysis.churn_prevention?.risk_level && (
+                      <div style={{ padding: '14px 16px', borderRadius: 12, background: T.danger + '10', border: `1px solid ${T.danger}30` }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+                          <Icon d={ic.shield} s={14} c={T.danger} />
+                          <div style={{ fontSize: 11, fontWeight: 700, color: T.danger, textTransform: 'uppercase' }}>Rủi ro</div>
+                        </div>
+                        <div style={{ fontSize: 20, fontWeight: 800, color: T.danger, marginBottom: 8 }}>
+                          {aiAnalysis.churn_prevention.risk_level === 'high' ? 'CAO' : aiAnalysis.churn_prevention.risk_level === 'medium' ? 'TRUNG BÌNH' : 'THẤP'}
+                        </div>
+                        <div style={{ height: 6, borderRadius: 3, background: T.cardBorder, overflow: 'hidden' }}>
+                          <div style={{ 
+                            height: '100%', 
+                            width: `${aiAnalysis.churn_prevention.risk_level === 'high' ? 85 : aiAnalysis.churn_prevention.risk_level === 'medium' ? 50 : 25}%`, 
+                            background: T.danger, 
+                            borderRadius: 3 
+                          }} />
+                        </div>
                       </div>
-                      <div style={{ fontSize: 13, color: T.text, lineHeight: 1.6 }}>{aiAnalysis.summary}</div>
+                    )}
+
+                    {/* Next Purchase Prediction Card */}
+                    {aiAnalysis.churn_prevention?.next_purchase_prediction?.predicted_date && (
+                      <div style={{ padding: '14px 16px', borderRadius: 12, background: T.info + '10', border: `1px solid ${T.info}30` }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+                          <Icon d={ic.clock} s={14} c={T.info} />
+                          <div style={{ fontSize: 11, fontWeight: 700, color: T.info, textTransform: 'uppercase' }}>Mua tiếp theo</div>
+                        </div>
+                        <div style={{ fontSize: 18, fontWeight: 800, color: T.info, marginBottom: 4 }}>
+                          {aiAnalysis.churn_prevention.next_purchase_prediction.predicted_date}
+                        </div>
+                        {aiAnalysis.churn_prevention.next_purchase_prediction.confidence && (
+                          <div style={{ fontSize: 10, color: T.textSec }}>
+                            Độ tin cậy: {aiAnalysis.churn_prevention.next_purchase_prediction.confidence === 'high' ? 'Cao' : aiAnalysis.churn_prevention.next_purchase_prediction.confidence === 'medium' ? 'Trung bình' : 'Thấp'}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Insights Count Card */}
+                    {aiAnalysis.insights && aiAnalysis.insights.length > 0 && (
+                      <div style={{ padding: '14px 16px', borderRadius: 12, background: T.accent + '10', border: `1px solid ${T.accent}30` }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+                          <Icon d={ic.target} s={14} c={T.accent} />
+                          <div style={{ fontSize: 11, fontWeight: 700, color: T.accent, textTransform: 'uppercase' }}>Insights</div>
+                        </div>
+                        <div style={{ fontSize: 20, fontWeight: 800, color: T.accent }}>
+                          {aiAnalysis.insights.length}
+                        </div>
+                        <div style={{ fontSize: 10, color: T.textSec }}>
+                          {aiAnalysis.insights.filter(i => i.type === 'opportunity').length} cơ hội · {aiAnalysis.insights.filter(i => i.type === 'risk').length} rủi ro
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Summary - Compact */}
+                  {aiAnalysis.summary && (
+                    <div style={{ padding: '12px 14px', borderRadius: 10, background: T.accent + '08', border: `1px solid ${T.accent}20` }}>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                        <Icon d={ic.sparkle} s={14} c={T.accent} style={{ flexShrink: 0, marginTop: 2 }} />
+                        <div style={{ fontSize: 12, color: T.text, lineHeight: 1.5 }}>{aiAnalysis.summary}</div>
+                      </div>
                     </div>
                   )}
 
-                  {/* Insights */}
+                  {/* Insights - Grid Layout */}
                   {aiAnalysis.insights && aiAnalysis.insights.length > 0 && (
                     <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
-                        <Icon d={ic.target} s={14} c={T.info} />
-                        <div style={{ fontSize: 13, fontWeight: 700 }}>Insights</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+                        <Icon d={ic.target} s={13} c={T.info} />
+                        <div style={{ fontSize: 12, fontWeight: 700 }}>Insights chính</div>
                       </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)', gap: 8 }}>
                         {aiAnalysis.insights.map((insight, i) => {
                           const typeColors = {
                             opportunity: T.success,
@@ -1070,20 +1127,20 @@ export function Customers({ dbOn, demoData, canExport, addLog }) {
                             <div
                               key={i}
                               style={{
-                                padding: '12px 16px',
-                                borderRadius: 10,
-                                background: color + '10',
-                                border: `1px solid ${color}25`
+                                padding: '10px 12px',
+                                borderRadius: 8,
+                                background: color + '08',
+                                border: `1px solid ${color}20`
                               }}
                             >
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-                                <Icon d={insight.type === 'risk' ? ic.alert : insight.type === 'opportunity' ? ic.trend : ic.target} s={12} c={color} />
-                                <div style={{ fontSize: 12, fontWeight: 700, color: color, textTransform: 'uppercase' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 6 }}>
+                                <Icon d={insight.type === 'risk' ? ic.alert : insight.type === 'opportunity' ? ic.trend : ic.target} s={11} c={color} />
+                                <span className="badge" style={{ background: color + '20', color: color, fontSize: 9, fontWeight: 700, padding: '2px 6px' }}>
                                   {insight.type === 'opportunity' ? 'Cơ hội' : insight.type === 'risk' ? 'Rủi ro' : insight.type === 'strength' ? 'Điểm mạnh' : 'Cảnh báo'}
-                                </div>
+                                </span>
                               </div>
-                              <div style={{ fontSize: 13, fontWeight: 700, color: T.text, marginBottom: 4 }}>{insight.title}</div>
-                              <div style={{ fontSize: 12, color: T.textSec, lineHeight: 1.5 }}>{insight.description}</div>
+                              <div style={{ fontSize: 12, fontWeight: 700, color: T.text, marginBottom: 3 }}>{insight.title}</div>
+                              <div style={{ fontSize: 11, color: T.textSec, lineHeight: 1.4 }}>{insight.description}</div>
                             </div>
                           );
                         })}
@@ -1091,200 +1148,98 @@ export function Customers({ dbOn, demoData, canExport, addLog }) {
                     </div>
                   )}
 
-                  {/* Recommendations */}
-                  {aiAnalysis.recommendations && aiAnalysis.recommendations.length > 0 && (
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
-                        <Icon d={ic.check} s={14} c={T.success} />
-                        <div style={{ fontSize: 13, fontWeight: 700 }}>Đề xuất</div>
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                        {aiAnalysis.recommendations.map((rec, i) => (
-                          <div
-                            key={i}
-                            style={{
-                              padding: '10px 14px',
-                              borderRadius: 8,
-                              background: T.success + '08',
-                              border: `1px solid ${T.success}20`,
-                              display: 'flex',
-                              alignItems: 'flex-start',
-                              gap: 8
-                            }}
-                          >
-                            <span style={{ fontSize: 12, fontWeight: 700, color: T.success, flexShrink: 0 }}>•</span>
-                            <div style={{ fontSize: 12, color: T.text, lineHeight: 1.5 }}>{rec}</div>
+                  {/* Recommendations & Actions - Combined */}
+                  {(aiAnalysis.recommendations?.length > 0 || aiAnalysis.next_actions?.length > 0) && (
+                    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 10 }}>
+                      {aiAnalysis.recommendations && aiAnalysis.recommendations.length > 0 && (
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 8 }}>
+                            <Icon d={ic.check} s={12} c={T.success} />
+                            <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: T.success }}>Đề xuất</div>
                           </div>
-                        ))}
-                      </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                            {aiAnalysis.recommendations.slice(0, 3).map((rec, i) => (
+                              <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontSize: 11, color: T.text }}>
+                                <span style={{ color: T.success, fontWeight: 700 }}>•</span>
+                                <span>{rec}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {aiAnalysis.next_actions && aiAnalysis.next_actions.length > 0 && (
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 8 }}>
+                            <Icon d={ic.play} s={12} c={T.accent} />
+                            <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: T.accent }}>Hành động</div>
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                            {aiAnalysis.next_actions.slice(0, 3).map((action, i) => (
+                              <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontSize: 11, color: T.text }}>
+                                <span style={{ color: T.accent, fontWeight: 700 }}>→</span>
+                                <span>{action}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
 
-                  {/* Next Actions */}
-                  {aiAnalysis.next_actions && aiAnalysis.next_actions.length > 0 && (
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
-                        <Icon d={ic.play} s={14} c={T.accent} />
-                        <div style={{ fontSize: 13, fontWeight: 700 }}>Hành động tiếp theo</div>
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                        {aiAnalysis.next_actions.map((action, i) => (
-                          <div
-                            key={i}
-                            style={{
-                              padding: '10px 14px',
-                              borderRadius: 8,
-                              background: T.accent + '08',
-                              border: `1px solid ${T.accent}20`,
-                              display: 'flex',
-                              alignItems: 'flex-start',
-                              gap: 8
-                            }}
-                          >
-                            <span style={{ fontSize: 12, fontWeight: 700, color: T.accent, flexShrink: 0 }}>→</span>
-                            <div style={{ fontSize: 12, color: T.text, lineHeight: 1.5 }}>{action}</div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Personalized Recommendations */}
+                  {/* Personalized Recommendations - Compact Grid */}
                   {aiAnalysis.personalized_recommendations && (
                     <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
-                        <Icon d={ic.cart} s={14} c={T.accent} />
-                        <div style={{ fontSize: 13, fontWeight: 700 }}>Gợi ý Sản phẩm Cá nhân Hoá</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 10 }}>
+                        <Icon d={ic.cart} s={12} c={T.accent} />
+                        <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: T.accent }}>Gợi ý sản phẩm</div>
                       </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: 8 }}>
                         {/* Frequently Bought */}
-                        {aiAnalysis.personalized_recommendations.frequently_bought && aiAnalysis.personalized_recommendations.frequently_bought.length > 0 && (
-                          <div>
-                            <div style={{ fontSize: 12, fontWeight: 700, color: T.text, marginBottom: 8 }}>Sản phẩm bạn hay mua</div>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                              {aiAnalysis.personalized_recommendations.frequently_bought.map((item, i) => (
-                                <div
-                                  key={i}
-                                  style={{
-                                    padding: '10px 14px',
-                                    borderRadius: 8,
-                                    background: T.accent + '08',
-                                    border: `1px solid ${T.accent}20`
-                                  }}
-                                >
-                                  <div style={{ fontSize: 12, fontWeight: 700, color: T.text, marginBottom: 4 }}>{item.product}</div>
-                                  <div style={{ fontSize: 11, color: T.textSec, lineHeight: 1.4 }}>{item.reason}</div>
-                                  {item.last_purchase && (
-                                    <div style={{ fontSize: 10, color: T.textMuted, marginTop: 4 }}>Mua cuối: {item.last_purchase}</div>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
+                        {aiAnalysis.personalized_recommendations.frequently_bought?.slice(0, 2).map((item, i) => (
+                          <div key={i} style={{ padding: '10px 12px', borderRadius: 8, background: T.accent + '08', border: `1px solid ${T.accent}20` }}>
+                            <div style={{ fontSize: 11, fontWeight: 700, color: T.text, marginBottom: 4 }}>{item.product}</div>
+                            <div style={{ fontSize: 10, color: T.textSec }}>{item.reason}</div>
                           </div>
-                        )}
-
+                        ))}
                         {/* Today Suggestions */}
-                        {aiAnalysis.personalized_recommendations.today_suggestions && aiAnalysis.personalized_recommendations.today_suggestions.length > 0 && (
-                          <div>
-                            <div style={{ fontSize: 12, fontWeight: 700, color: T.text, marginBottom: 8 }}>Gợi ý hôm nay cho bạn</div>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                              {aiAnalysis.personalized_recommendations.today_suggestions.map((item, i) => (
-                                <div
-                                  key={i}
-                                  style={{
-                                    padding: '10px 14px',
-                                    borderRadius: 8,
-                                    background: T.info + '08',
-                                    border: `1px solid ${T.info}20`
-                                  }}
-                                >
-                                  <div style={{ fontSize: 12, fontWeight: 700, color: T.text, marginBottom: 4 }}>{item.product}</div>
-                                  <div style={{ fontSize: 11, color: T.textSec, lineHeight: 1.4 }}>{item.reason}</div>
-                                  {item.context && (
-                                    <div style={{ fontSize: 10, color: T.info, marginTop: 4, fontStyle: 'italic' }}>{item.context}</div>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
+                        {aiAnalysis.personalized_recommendations.today_suggestions?.slice(0, 1).map((item, i) => (
+                          <div key={`today-${i}`} style={{ padding: '10px 12px', borderRadius: 8, background: T.info + '08', border: `1px solid ${T.info}20` }}>
+                            <div style={{ fontSize: 10, fontWeight: 700, color: T.info, marginBottom: 4, textTransform: 'uppercase' }}>Hôm nay</div>
+                            <div style={{ fontSize: 11, fontWeight: 700, color: T.text, marginBottom: 3 }}>{item.product}</div>
+                            <div style={{ fontSize: 10, color: T.textSec }}>{item.reason}</div>
                           </div>
-                        )}
-
-                        {/* Cross-sell */}
-                        {aiAnalysis.personalized_recommendations.cross_sell && aiAnalysis.personalized_recommendations.cross_sell.length > 0 && (
-                          <div>
-                            <div style={{ fontSize: 12, fontWeight: 700, color: T.text, marginBottom: 8 }}>Bạn có thể cần thêm</div>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                              {aiAnalysis.personalized_recommendations.cross_sell.map((item, i) => (
-                                <div
-                                  key={i}
-                                  style={{
-                                    padding: '10px 14px',
-                                    borderRadius: 8,
-                                    background: T.success + '08',
-                                    border: `1px solid ${T.success}20`
-                                  }}
-                                >
-                                  <div style={{ fontSize: 12, fontWeight: 700, color: T.text, marginBottom: 4 }}>{item.product}</div>
-                                  <div style={{ fontSize: 11, color: T.textSec, lineHeight: 1.4 }}>{item.reason}</div>
-                                  {item.complementary_to && (
-                                    <div style={{ fontSize: 10, color: T.success, marginTop: 4 }}>Bổ sung cho: {item.complementary_to}</div>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
+                        ))}
                       </div>
                     </div>
                   )}
 
-                  {/* AI-Driven Promotions */}
+                  {/* AI-Driven Promotions - Compact */}
                   {aiAnalysis.ai_promotions && aiAnalysis.ai_promotions.length > 0 && (
                     <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
-                        <Icon d={ic.gift} s={14} c={T.warning} />
-                        <div style={{ fontSize: 13, fontWeight: 700 }}>Chương Trình Khuyến Mãi Tự Động</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 8 }}>
+                        <Icon d={ic.gift} s={12} c={T.warning} />
+                        <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: T.warning }}>Khuyến mãi tự động</div>
                       </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                        {aiAnalysis.ai_promotions.map((promo, i) => {
+                      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)', gap: 8 }}>
+                        {aiAnalysis.ai_promotions.slice(0, 2).map((promo, i) => {
                           const typeLabels = {
-                            cycle_based: 'Chu kỳ mua',
-                            churn_prevention: 'Ngăn chặn rời bỏ',
+                            cycle_based: 'Chu kỳ',
+                            churn_prevention: 'Ngăn rời bỏ',
                             segment_based: 'Phân khúc',
-                            new_customer: 'Khách hàng mới'
+                            new_customer: 'KH mới'
                           };
                           return (
-                            <div
-                              key={i}
-                              style={{
-                                padding: '12px 16px',
-                                borderRadius: 10,
-                                background: T.warning + '10',
-                                border: `1px solid ${T.warning}25`
-                              }}
-                            >
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-                                <Icon d={ic.gift} s={12} c={T.warning} />
-                                <div style={{ fontSize: 11, fontWeight: 700, color: T.warning, textTransform: 'uppercase' }}>
+                            <div key={i} style={{ padding: '10px 12px', borderRadius: 8, background: T.warning + '08', border: `1px solid ${T.warning}20` }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 6 }}>
+                                <Icon d={ic.gift} s={10} c={T.warning} />
+                                <span className="badge" style={{ background: T.warning + '20', color: T.warning, fontSize: 9, padding: '2px 6px' }}>
                                   {typeLabels[promo.type] || promo.type}
-                                </div>
+                                </span>
                               </div>
-                              <div style={{ fontSize: 13, fontWeight: 700, color: T.text, marginBottom: 4 }}>{promo.title}</div>
-                              <div style={{ fontSize: 12, color: T.textSec, lineHeight: 1.5, marginBottom: 6 }}>{promo.description}</div>
-                              {promo.trigger && (
-                                <div style={{ fontSize: 11, color: T.textMuted, marginBottom: 4 }}>
-                                  <span style={{ fontWeight: 600 }}>Kích hoạt:</span> {promo.trigger}
-                                </div>
-                              )}
+                              <div style={{ fontSize: 11, fontWeight: 700, color: T.text, marginBottom: 3 }}>{promo.title}</div>
                               {promo.suggested_offer && (
-                                <div style={{ fontSize: 12, fontWeight: 700, color: T.warning, marginBottom: 4 }}>
-                                  Đề xuất: {promo.suggested_offer}
-                                </div>
-                              )}
-                              {promo.channel && (
-                                <div style={{ fontSize: 10, color: T.textMuted }}>
-                                  Kênh: {promo.channel}
-                                </div>
+                                <div style={{ fontSize: 10, color: T.warning, fontWeight: 600 }}>{promo.suggested_offer}</div>
                               )}
                             </div>
                           );
@@ -1293,88 +1248,53 @@ export function Customers({ dbOn, demoData, canExport, addLog }) {
                     </div>
                   )}
 
-                  {/* Churn Prevention */}
+                  {/* Churn Prevention - Compact */}
                   {aiAnalysis.churn_prevention && (
                     <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
-                        <Icon d={ic.shield} s={14} c={T.danger} />
-                        <div style={{ fontSize: 13, fontWeight: 700 }}>Dự Đoán Hành Vi & Ngăn Chặn Khách Rời Bỏ</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 10 }}>
+                        <Icon d={ic.shield} s={12} c={T.danger} />
+                        <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: T.danger }}>Ngăn chặn rời bỏ</div>
                       </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                        {/* Risk Level */}
-                        {aiAnalysis.churn_prevention.risk_level && (
-                          <div style={{ padding: '12px 16px', borderRadius: 10, background: T.danger + '10', border: `1px solid ${T.danger}25` }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-                              <Icon d={ic.alert} s={12} c={T.danger} />
-                              <div style={{ fontSize: 12, fontWeight: 700, color: T.danger, textTransform: 'uppercase' }}>
-                                Mức độ rủi ro: {aiAnalysis.churn_prevention.risk_level === 'high' ? 'CAO' : aiAnalysis.churn_prevention.risk_level === 'medium' ? 'TRUNG BÌNH' : 'THẤP'}
-                              </div>
-                            </div>
-                            {aiAnalysis.churn_prevention.risk_factors && aiAnalysis.churn_prevention.risk_factors.length > 0 && (
-                              <div style={{ marginTop: 8 }}>
-                                <div style={{ fontSize: 11, fontWeight: 700, color: T.text, marginBottom: 6 }}>Yếu tố rủi ro:</div>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                                  {aiAnalysis.churn_prevention.risk_factors.map((factor, i) => (
-                                    <div key={i} style={{ fontSize: 11, color: T.textSec, paddingLeft: 12, position: 'relative' }}>
-                                      <span style={{ position: 'absolute', left: 0 }}>•</span> {factor}
-                                    </div>
-                                  ))}
+                      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 8 }}>
+                        {/* Risk Factors */}
+                        {aiAnalysis.churn_prevention.risk_factors && aiAnalysis.churn_prevention.risk_factors.length > 0 && (
+                          <div style={{ padding: '10px 12px', borderRadius: 8, background: T.danger + '08', border: `1px solid ${T.danger}20` }}>
+                            <div style={{ fontSize: 10, fontWeight: 700, color: T.danger, marginBottom: 6, textTransform: 'uppercase' }}>Yếu tố rủi ro</div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                              {aiAnalysis.churn_prevention.risk_factors.slice(0, 3).map((factor, i) => (
+                                <div key={i} style={{ fontSize: 10, color: T.textSec, display: 'flex', alignItems: 'flex-start', gap: 4 }}>
+                                  <span style={{ color: T.danger }}>•</span>
+                                  <span>{factor}</span>
                                 </div>
-                              </div>
-                            )}
+                              ))}
+                            </div>
                           </div>
                         )}
 
                         {/* Prevention Strategy */}
                         {aiAnalysis.churn_prevention.prevention_strategy && aiAnalysis.churn_prevention.prevention_strategy.length > 0 && (
-                          <div>
-                            <div style={{ fontSize: 12, fontWeight: 700, color: T.text, marginBottom: 8 }}>Chiến lược ngăn chặn</div>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                              {aiAnalysis.churn_prevention.prevention_strategy.map((strategy, i) => (
-                                <div
-                                  key={i}
-                                  style={{
-                                    padding: '10px 14px',
-                                    borderRadius: 8,
-                                    background: T.success + '08',
-                                    border: `1px solid ${T.success}20`
-                                  }}
-                                >
-                                  <div style={{ fontSize: 12, color: T.text, lineHeight: 1.5 }}>{strategy}</div>
+                          <div style={{ padding: '10px 12px', borderRadius: 8, background: T.success + '08', border: `1px solid ${T.success}20` }}>
+                            <div style={{ fontSize: 10, fontWeight: 700, color: T.success, marginBottom: 6, textTransform: 'uppercase' }}>Chiến lược</div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                              {aiAnalysis.churn_prevention.prevention_strategy.slice(0, 2).map((strategy, i) => (
+                                <div key={i} style={{ fontSize: 10, color: T.textSec, display: 'flex', alignItems: 'flex-start', gap: 4 }}>
+                                  <span style={{ color: T.success }}>✓</span>
+                                  <span>{strategy}</span>
                                 </div>
                               ))}
                             </div>
                           </div>
                         )}
-
-                        {/* Next Purchase Prediction */}
-                        {aiAnalysis.churn_prevention.next_purchase_prediction && (
-                          <div style={{ padding: '12px 16px', borderRadius: 10, background: T.info + '10', border: `1px solid ${T.info}25` }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-                              <Icon d={ic.clock} s={12} c={T.info} />
-                              <div style={{ fontSize: 12, fontWeight: 700, color: T.info }}>Dự đoán mua tiếp theo</div>
-                            </div>
-                            {aiAnalysis.churn_prevention.next_purchase_prediction.predicted_date && (
-                              <div style={{ fontSize: 13, fontWeight: 700, color: T.text, marginBottom: 4 }}>
-                                Ngày dự kiến: {aiAnalysis.churn_prevention.next_purchase_prediction.predicted_date}
-                              </div>
-                            )}
-                            {aiAnalysis.churn_prevention.next_purchase_prediction.confidence && (
-                              <div style={{ fontSize: 11, color: T.textSec, marginBottom: 8 }}>
-                                Độ tin cậy: {aiAnalysis.churn_prevention.next_purchase_prediction.confidence === 'high' ? 'Cao' : aiAnalysis.churn_prevention.next_purchase_prediction.confidence === 'medium' ? 'Trung bình' : 'Thấp'}
-                              </div>
-                            )}
-                            {aiAnalysis.churn_prevention.next_purchase_prediction.suggested_products && aiAnalysis.churn_prevention.next_purchase_prediction.suggested_products.length > 0 && (
-                              <div>
-                                <div style={{ fontSize: 11, fontWeight: 700, color: T.text, marginBottom: 4 }}>Sản phẩm đề xuất:</div>
-                                <div style={{ fontSize: 11, color: T.textSec }}>
-                                  {aiAnalysis.churn_prevention.next_purchase_prediction.suggested_products.join(', ')}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        )}
                       </div>
+                      {/* Suggested Products */}
+                      {aiAnalysis.churn_prevention.next_purchase_prediction?.suggested_products?.length > 0 && (
+                        <div style={{ marginTop: 8, padding: '8px 12px', borderRadius: 8, background: T.info + '08', border: `1px solid ${T.info}20` }}>
+                          <div style={{ fontSize: 10, fontWeight: 700, color: T.info, marginBottom: 4 }}>Sản phẩm đề xuất:</div>
+                          <div style={{ fontSize: 10, color: T.textSec }}>
+                            {aiAnalysis.churn_prevention.next_purchase_prediction.suggested_products.slice(0, 3).join(' · ')}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
