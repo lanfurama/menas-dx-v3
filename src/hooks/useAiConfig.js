@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { AI_MODELS } from '../constants/index.js';
 import { aiApi } from '../services/api.js';
 
@@ -134,8 +134,17 @@ export function useAiConfig() {
 
   const currentModel = AI_MODELS.find(m => m.id === selectedModel) || AI_MODELS[0];
 
+  const availableModels = useMemo(
+    () =>
+      AI_MODELS.filter(model =>
+        aiConfigs.some(cfg => cfg.model_id === model.id && cfg.is_active)
+      ),
+    [aiConfigs]
+  );
+
   return {
     aiConfigs,
+    availableModels,
     selectedModel,
     setSelectedModel,
     apiKey,

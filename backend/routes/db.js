@@ -323,8 +323,10 @@ router.get('/datamart/customer', async (req, res) => {
     const { limit = 1000, offset = 0, search = '' } = req.query;
     const externalPool = await getActiveExternalPool();
     
-    const result = await externalPool.query(customerQueries.getCustomers(limit, offset, search));
-    const countResult = await externalPool.query(customerQueries.countCustomers(search));
+    const [result, countResult] = await Promise.all([
+      externalPool.query(customerQueries.getCustomers(limit, offset, search)),
+      externalPool.query(customerQueries.countCustomers(search))
+    ]);
     
     res.json({
       data: result.rows,
@@ -493,7 +495,7 @@ router.get('/datamart/customer/:customerId/modal', async (req, res) => {
         json_agg(${itemJson} ORDER BY t."STT" NULLS LAST, t."MaHH" NULLS LAST) AS "items"
       FROM public.datamart_transaction t ${locJoin}
       WHERE t."MaTheKHTT"::text=$1 AND t."MaHD" IS NOT NULL AND TRIM(COALESCE(t."MaHD",''))!=''
-      GROUP BY t."MaHD" ORDER BY MAX(t."NgayGioQuet") DESC NULLS LAST LIMIT 100
+      GROUP BY t."MaHD" ORDER BY MAX(t."NgayGioQuet") DESC NULLS LAST LIMIT 50
     `;
 
     const countQuery = `

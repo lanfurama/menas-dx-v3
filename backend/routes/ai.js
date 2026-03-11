@@ -7,7 +7,12 @@ const router = express.Router();
 router.get('/configs', async (req, res) => {
   try {
     const result = await configPool.query(
-      'SELECT id, model_id, model_name, provider, is_default, is_active FROM ai_config ORDER BY is_default DESC'
+      `SELECT id, model_id, model_name, provider, is_default, is_active
+       FROM ai_config
+       WHERE is_active = true
+         AND api_key IS NOT NULL
+         AND api_key <> ''
+       ORDER BY is_default DESC`
     );
     res.json({ configs: result.rows });
   } catch (error) {
@@ -112,8 +117,8 @@ router.post('/test', async (req, res) => {
     
     switch (modelId) {
       case 'gemini': {
-        // Test Google Gemini API
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${actualApiKey}`, {
+        // Test Google Gemini API (lower tier model)
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${actualApiKey}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -238,7 +243,7 @@ router.put('/config/:modelId', async (req, res) => {
     const modelInfo = {
       claude: { name: 'Claude (Anthropic)', provider: 'anthropic' },
       gpt4: { name: 'GPT-4o (OpenAI)', provider: 'openai' },
-      gemini: { name: 'Gemini Pro (Google)', provider: 'google' },
+      gemini: { name: 'Gemini Flash (Google)', provider: 'google' },
       local: { name: 'Local LLM (Ollama)', provider: 'ollama' }
     };
     
@@ -432,7 +437,7 @@ Chỉ trả về JSON, không có text khác.`;
     // Call AI API based on model
     switch (model_id) {
       case 'gemini': {
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${api_key}`, {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${api_key}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -708,7 +713,7 @@ Lưu ý:
     // Call AI API based on model
     switch (model_id) {
       case 'gemini': {
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${api_key}`, {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${api_key}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -969,7 +974,7 @@ router.post('/chat', async (req, res) => {
       }
       
       case 'gemini': {
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${api_key}`, {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${api_key}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
-import { T, ic, AI_MODELS } from '../constants/index.js';
+import { T, ic } from '../constants/index.js';
 import { Icon } from '../components/Icon.jsx';
 import { useAiConfig } from '../hooks/useAiConfig.js';
 import { aiApi } from '../services/api.js';
@@ -18,7 +18,7 @@ const QUICK_PROMPTS = [
 
 export function AIChat({ dbOn, demoData, addLog, activityLog = [] }) {
   const location = useLocation();
-  const { selectedModel, setSelectedModel } = useAiConfig();
+  const { selectedModel, setSelectedModel, availableModels } = useAiConfig();
   const [chatMsgs, setChatMsgs] = useState([
     {
       role: "ai",
@@ -28,6 +28,9 @@ export function AIChat({ dbOn, demoData, addLog, activityLog = [] }) {
   const [chatInput, setChatInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
   const chatEndRef = useRef(null);
+
+  const activeModels = availableModels || [];
+  const effectiveModel = activeModels.find(m => m.id === selectedModel) || activeModels[0] || null;
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -43,6 +46,10 @@ export function AIChat({ dbOn, demoData, addLog, activityLog = [] }) {
 
   const sendAiMsg = async () => {
     if (!chatInput.trim() || chatLoading) return;
+    if (!effectiveModel) {
+      alert('Chưa cấu hình AI model. Vào Cài đặt → AI Config để cấu hình trước khi sử dụng AI Chat.');
+      return;
+    }
     const userMsg = chatInput.trim();
     setChatMsgs(prev => [...prev, { role: "user", text: userMsg }]);
     setChatInput("");
@@ -73,7 +80,7 @@ Trả lời bằng tiếng Việt. Khi đề xuất lọc KH, gợi ý tiêu ch�
 
       // Call backend API
       const response = await aiApi.chat({
-        modelId: selectedModel,
+        modelId: effectiveModel.id,
         messages: chatMsgs.map(m => ({
           role: m.role === "user" ? "user" : "assistant",
           content: m.text
@@ -146,25 +153,29 @@ Trả lời bằng tiếng Việt. Khi đề xuất lọc KH, gợi ý tiêu ch�
     return `Cảm ơn câu hỏi! Dựa trên dữ liệu MENAS DX:\n\n• Tổng KH: ${formatNumber(demoData?.overview?.total_customers || 0)} (${formatNumber(demoData?.overview?.active_customers || 0)} active)\n• AOV: ${formatValue(demoData?.overview?.avg_order_value || 0)}\n• Activity log: ${activityLog.length} records\n\nBạn có thể hỏi: "phân tích VIP", "đề xuất chiến dịch", "cảnh báo churn", "xem log hoạt động", "ai gửi ZNS gần đây"...`;
   };
 
-  const currentModel = AI_MODELS.find(m => m.id === selectedModel) || AI_MODELS[0];
-
   return (
     <div className="fu" style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 180px)" }}>
       {/* Model selector */}
       <div className="card" style={{ padding: 12, marginBottom: 10, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
         <Icon d={ic.brain} s={16} c={T.purple} />
         <span style={{ fontSize: 12, fontWeight: 700, color: T.text }}>AI Model:</span>
-        {AI_MODELS.map(m => (
-          <button
-            key={m.id}
-            className={`chip ${selectedModel === m.id ? 'on' : ''}`}
-            style={selectedModel === m.id ? { borderColor: m.color, color: m.color, background: `${m.color}20` } : {}}
-            onClick={() => setSelectedModel(m.id)}
-          >
-            <span style={{ width: 6, height: 6, borderRadius: "50%", background: m.color, display: "inline-block", marginRight: 4 }} />
-            {m.name}
-          </button>
-        ))}
+        {activeModels.length === 0 ? (
+          <span style={{ fontSize: 11, color: T.textMuted }}>
+            Chưa cấu hình AI. Vào Cài đặt → AI Config để bật model.
+          </span>
+        ) : (
+          activeModels.map(m => (
+            <button
+              key={m.id}
+              className={`chip ${effectiveModel && effectiveModel.id === m.id ? 'on' : ''}`}
+              style={effectiveModel && effectiveModel.id === m.id ? { borderColor: m.color, color: m.color, background: `${m.color}20` } : {}}
+              onClick={() => setSelectedModel(m.id)}
+            >
+              <span style={{ width: 6, height: 6, borderRadius: "50%", background: m.color, display: "inline-block", marginRight: 4 }} />
+              {m.name}
+            </button>
+          ))
+        )}
         <span style={{ fontSize: 10, color: T.textMuted, marginLeft: "auto" }}>API Key: Cài đặt → AI Config</span>
       </div>
 
@@ -174,10 +185,10 @@ Trả lời bằng tiếng Việt. Khi đề xuất lọc KH, gợi ý tiêu ch�
           {chatMsgs.map((m, i) => (
             <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: m.role === "user" ? "flex-end" : "flex-start" }}>
               <div className={`chat-bubble ${m.role === "user" ? "chat-user" : "chat-ai"}`}>
-                {m.role === "ai" && (
+                {m.role === "ai" && effectiveModel && (
                   <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 6, fontSize: 10, fontWeight: 700, color: T.purple }}>
                     <Icon d={ic.sparkle} s={11} c={T.purple} />
-                    {currentModel.name}
+                    {effectiveModel.name}
                   </div>
                 )}
                 <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.6 }}>{m.text}</div>
@@ -201,7 +212,7 @@ Trả lời bằng tiếng Việt. Khi đề xuất lọc KH, gợi ý tiêu ch�
           <input
             className="inp"
             style={{ flex: 1 }}
-            placeholder="Hỏi AI: phân tích VIP, đề xuất chiến dịch, cảnh báo churn..."
+            placeholder={effectiveModel ? "Hỏi AI: phân tích VIP, đề xuất chiến dịch, cảnh báo churn..." : "Vào Cài đặt → AI Config để bật AI trước khi chat"}
             value={chatInput}
             onChange={e => setChatInput(e.target.value)}
             onKeyDown={e => {
@@ -210,8 +221,14 @@ Trả lời bằng tiếng Việt. Khi đề xuất lọc KH, gợi ý tiêu ch�
                 sendAiMsg();
               }
             }}
+            disabled={!effectiveModel}
           />
-          <button className="btn btn-ai" onClick={sendAiMsg} disabled={chatLoading || !chatInput.trim()}>
+          <button
+            className="btn btn-ai"
+            onClick={sendAiMsg}
+            disabled={!effectiveModel || chatLoading || !chatInput.trim()}
+            title={effectiveModel ? "Gửi tin nhắn tới AI" : "Chưa cấu hình AI model"}
+          >
             <Icon d={ic.send} s={14} />
           </button>
         </div>
@@ -222,8 +239,11 @@ Trả lời bằng tiếng Việt. Khi đề xuất lọc KH, gợi ý tiêu ch�
             <button
               key={q}
               className="chip"
-              style={{ fontSize: 10, padding: "3px 8px" }}
-              onClick={() => setChatInput(q)}
+              style={{ fontSize: 10, padding: "3px 8px", opacity: effectiveModel ? 1 : 0.5, cursor: effectiveModel ? "pointer" : "not-allowed" }}
+              onClick={() => {
+                if (!effectiveModel) return;
+                setChatInput(q);
+              }}
             >
               {q}
             </button>

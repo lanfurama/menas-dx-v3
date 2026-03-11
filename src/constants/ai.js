@@ -3,7 +3,7 @@ import { T } from './theme.js';
 export const AI_MODELS = [
   { id: "claude", name: "Claude (Anthropic)", model: "claude-sonnet-4-20250514", provider: "anthropic", default: true, color: T.purple },
   { id: "gpt4", name: "GPT-4o (OpenAI)", model: "gpt-4o", provider: "openai", default: false, color: T.success },
-  { id: "gemini", name: "Gemini Pro (Google)", model: "gemini-pro", provider: "google", default: false, color: T.info },
+  { id: "gemini", name: "Gemini Flash (Google)", model: "gemini-flash-latest", provider: "google", default: false, color: T.info },
   { id: "local", name: "Local LLM (Ollama)", model: "llama3", provider: "ollama", default: false, color: T.warning },
 ];
 
