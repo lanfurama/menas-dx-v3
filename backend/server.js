@@ -15,8 +15,19 @@ dotenv.config({ path: join(__dirname, '../.env') });
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+const allowedOrigins = [
+  'http://localhost:3006',
+  'https://phulonghotels.com:8005',
+  ...(process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',').map(origin => origin.trim()) : [])
+];
+
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:3006',
+  origin(origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error(`Not allowed by CORS: ${origin}`));
+  },
   credentials: true
 }));
 app.use(express.json());
