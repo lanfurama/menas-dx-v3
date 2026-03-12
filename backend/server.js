@@ -13,7 +13,7 @@ const __dirname = dirname(__filename);
 dotenv.config({ path: join(__dirname, '../.env') });
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 30060;
 
 const allowedOrigins = [
   'http://localhost:3006',

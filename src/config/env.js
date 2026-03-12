@@ -24,7 +24,7 @@ export const env = {
       import.meta.env.VITE_API_URL ||
       (typeof window !== 'undefined' &&
       (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-        ? 'http://localhost:3000/api/v1'
+        ? 'http://localhost:30060/api/v1'
         : '/api/v1'),
   },
 };
@@ -32,3 +32,4 @@ export const env = {
 // Helper để check nếu đang ở development
 export const isDev = import.meta.env.DEV;
 export const isProd = import.meta.env.PROD;
+

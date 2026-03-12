@@ -1,7 +1,7 @@
 const defaultApiBase =
   typeof window !== 'undefined' &&
   (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-    ? 'http://localhost:3000/api/v1'
+    ? 'http://localhost:30060/api/v1'
     : '/api/v1';
 
 const API_BASE = import.meta.env.VITE_API_URL || defaultApiBase;
@@ -111,3 +111,4 @@ export const zaloApi = {
   getConfig: () => request('/zalo/config'),
   getTemplates: () => request('/zalo/templates'),
 };
+
