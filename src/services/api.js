@@ -1,4 +1,4 @@
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
 
 const request = async (endpoint, options = {}) => {
   const url = `${API_BASE}${endpoint}`;
@@ -24,7 +24,7 @@ const request = async (endpoint, options = {}) => {
   } catch (error) {
     if (error.name === 'TypeError' && error.message.includes('fetch')) {
       console.error(`[API Network Error] Cannot connect to ${url}`);
-      console.error('Make sure backend server is running on', API_BASE.replace('/api', ''));
+      console.error('Make sure backend server is running and API_BASE is correct:', API_BASE);
       throw new Error(`Không thể kết nối đến server. Vui lòng kiểm tra backend có đang chạy không.`);
     }
     console.error(`[API Error] ${url}:`, error);

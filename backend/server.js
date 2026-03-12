@@ -32,13 +32,13 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// Routes
-app.use('/api/db', dbRouter);
-app.use('/api/ai', aiRouter);
-app.use('/api/zalo', zaloRouter);
+// Routes (versioned API)
+app.use('/api/v1/db', dbRouter);
+app.use('/api/v1/ai', aiRouter);
+app.use('/api/v1/zalo', zaloRouter);
 
 // Health check
-app.get('/api/health', (req, res) => {
+app.get('/api/v1/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
