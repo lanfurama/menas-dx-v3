@@ -32,6 +32,17 @@ app.use(cors({
 }));
 app.use(express.json());
 
+// Basic request logger
+app.use((req, res, next) => {
+  const start = Date.now();
+  console.log(`[REQ] ${req.method} ${req.originalUrl}`);
+  res.on('finish', () => {
+    const ms = Date.now() - start;
+    console.log(`[RES] ${req.method} ${req.originalUrl} -> ${res.statusCode} (${ms}ms)`);
+  });
+  next();
+});
+
 // Routes (versioned API)
 app.use('/api/v1/db', dbRouter);
 app.use('/api/v1/ai', aiRouter);
@@ -40,6 +51,26 @@ app.use('/api/v1/zalo', zaloRouter);
 // Health check
 app.get('/api/v1/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Centralized error handler (log all API errors)
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, next) => {
+  console.error('[API ERROR]', {
+    method: req.method,
+    url: req.originalUrl,
+    message: err.message,
+    stack: err.stack,
+  });
+
+  if (res.headersSent) {
+    return;
+  }
+
+  const status = err.status || err.statusCode || 500;
+  res.status(status).json({
+    error: status === 500 ? 'Internal server error' : err.message || 'Request failed',
+  });
 });
 
 app.listen(PORT, () => {
