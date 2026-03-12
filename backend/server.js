@@ -3,6 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { existsSync } from 'fs';
 import { dbRouter } from './routes/db.js';
 import { aiRouter } from './routes/ai.js';
 import { zaloRouter } from './routes/zalo.js';
@@ -11,6 +12,9 @@ import { zaloRouter } from './routes/zalo.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 dotenv.config({ path: join(__dirname, '../.env') });
+
+// Path to frontend build directory
+const DIST_PATH = join(__dirname, '../dist');
 
 const app = express();
 const PORT = process.env.PORT || 30060;
@@ -43,7 +47,22 @@ app.get('/api/v1/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// 404 handler - log tất cả request không match
+// Serve static files (frontend build) - chỉ khi có dist folder
+if (existsSync(DIST_PATH)) {
+  app.use(express.static(DIST_PATH));
+  console.log(`📁 Serving static files from ${DIST_PATH}`);
+  
+  // SPA fallback: tất cả routes không phải API đều serve index.html
+  app.get('*', (req, res, next) => {
+    // Skip API routes
+    if (req.path.startsWith('/api/')) {
+      return next();
+    }
+    res.sendFile(join(DIST_PATH, 'index.html'));
+  });
+}
+
+// 404 handler - log tất cả request không match (chỉ cho API routes)
 app.use((req, res, next) => {
   console.error('[404] Route not found:', {
     method: req.method,
