@@ -43,6 +43,34 @@ app.get('/api/v1/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// 404 handler - log tất cả request không match
+app.use((req, res, next) => {
+  console.error('[404] Route not found:', {
+    method: req.method,
+    url: req.originalUrl,
+    path: req.path,
+    query: req.query,
+    headers: {
+      host: req.headers.host,
+      origin: req.headers.origin,
+      referer: req.headers.referer,
+    },
+  });
+  res.status(404).json({
+    error: 'Route not found',
+    method: req.method,
+    url: req.originalUrl,
+    availableRoutes: [
+      'GET /api/v1/health',
+      'GET /api/v1/db/config',
+      'POST /api/v1/db/config',
+      'GET /api/v1/db/health',
+      'GET /api/v1/ai/config',
+      'GET /api/v1/ai/configs',
+    ],
+  });
+});
+
 // Centralized error handler (log all API errors)
 // eslint-disable-next-line no-unused-vars
 app.use((err, req, res, next) => {
@@ -63,6 +91,8 @@ app.use((err, req, res, next) => {
   });
 });
 
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on http://localhost:${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Server running on http://0.0.0.0:${PORT}`);
+  console.log(`   Accessible at http://localhost:${PORT}`);
+  console.log(`   And from external IPs on port ${PORT}`);
 });
