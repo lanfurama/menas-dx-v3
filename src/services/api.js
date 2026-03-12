@@ -1,10 +1,22 @@
-const defaultApiBase =
-  typeof window !== 'undefined' &&
-  (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-    ? 'http://localhost:30060/api/v1'
-    : '/api/v1';
+// Tự động detect API base URL:
+// - Localhost: http://localhost:30060/api/v1
+// - Production: http://{hostname}:30060/api/v1 (backend luôn chạy port 30060)
+const getDefaultApiBase = () => {
+  if (typeof window === 'undefined') return '/api/v1';
+  
+  const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  const protocol = window.location.protocol;
+  const hostname = window.location.hostname;
+  
+  if (isLocalhost) {
+    return 'http://localhost:30060/api/v1';
+  }
+  
+  // Production: dùng cùng hostname nhưng port 30060
+  return `${protocol}//${hostname}:30060/api/v1`;
+};
 
-const API_BASE = import.meta.env.VITE_API_URL || defaultApiBase;
+const API_BASE = import.meta.env.VITE_API_URL || getDefaultApiBase();
 
 const request = async (endpoint, options = {}) => {
   const url = `${API_BASE}${endpoint}`;
