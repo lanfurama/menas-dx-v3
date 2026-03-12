@@ -19,7 +19,7 @@ export const env = {
   // App
   app: {
     env: import.meta.env.MODE || 'development',
-    port: import.meta.env.VITE_PORT || 3006,
+    // Port được config trong vite.config.js, không cần env
     apiUrl:
       import.meta.env.VITE_API_URL ||
       (typeof window !== 'undefined' &&
