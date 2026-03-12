@@ -14,8 +14,6 @@ dotenv.config({ path: join(__dirname, '../.env') });
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-// Chỉ listen 127.0.0.1 khi deploy để backend không lộ ra ngoài; Nginx reverse proxy /api -> đây.
-const HOST = process.env.BACKEND_HOST ?? '127.0.0.1';
 
 app.use(cors({
   origin: process.env.CORS_ORIGIN || 'http://localhost:3006',
@@ -33,6 +31,6 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-app.listen(PORT, HOST, () => {
-  console.log(`🚀 Backend running on http://${HOST}:${PORT}`);
+app.listen(PORT, () => {
+  console.log(`🚀 Server running on http://localhost:${PORT}`);
 });
