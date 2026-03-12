@@ -1,4 +1,5 @@
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+// Production: dùng relative /api (cùng host) nếu không set VITE_API_URL. Deploy: set VITE_API_URL đúng URL backend rồi build.
+const API_BASE = import.meta.env.VITE_API_URL || (import.meta.env.PROD ? '/api' : 'http://localhost:3000/api');
 
 const request = async (endpoint, options = {}) => {
   const url = `${API_BASE}${endpoint}`;
