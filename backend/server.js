@@ -17,12 +17,12 @@ dotenv.config({ path: join(__dirname, '../.env') });
 const DIST_PATH = join(__dirname, '../dist');
 
 const app = express();
-const PORT = process.env.PORT || 30060;
+const PORT = process.env.PORT || 3007;
 
-// CORS: tự động accept mọi origin (phù hợp cho mọi server)
+// Middleware
 app.use(cors({
-  origin: true, // Accept any origin
-  credentials: true
+    origin: process.env.CORS_ORIGINS?.split(',') || ['http://localhost:5173', 'http://localhost:3006'],
+    credentials: true
 }));
 app.use(express.json());
 

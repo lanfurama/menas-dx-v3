@@ -19,22 +19,7 @@ export const env = {
   // App
   app: {
     env: import.meta.env.MODE || 'development',
-    // Port được config trong vite.config.js, không cần env
-    apiUrl: (() => {
-      if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
-      if (typeof window === 'undefined') return '/api/v1';
-      
-      const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-      const isDev = import.meta.env.DEV;
-      
-      // Dev mode: backend chạy riêng port 30060
-      if (isDev && isLocalhost) {
-        return 'http://localhost:30060/api/v1';
-      }
-      
-      // Production: relative path (backend serve cả static + API cùng port)
-      return '/api/v1';
-    })(),
+    apiUrl: import.meta.env.VITE_API_URL || '/api/v1',
   },
 };
 

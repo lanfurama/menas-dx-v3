@@ -1,22 +1,4 @@
-// Tự động detect API base URL:
-// - Localhost (dev): http://localhost:30060/api/v1 (backend chạy riêng)
-// - Production: /api/v1 (relative path, backend serve cả static + API cùng port)
-const getDefaultApiBase = () => {
-  if (typeof window === 'undefined') return '/api/v1';
-  
-  const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-  const isDev = import.meta.env.DEV;
-  
-  // Dev mode: backend chạy riêng port 30060
-  if (isDev && isLocalhost) {
-    return 'http://localhost:30060/api/v1';
-  }
-  
-  // Production: relative path (backend serve cả static + API cùng port)
-  return '/api/v1';
-};
-
-const API_BASE = import.meta.env.VITE_API_URL || getDefaultApiBase();
+const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
 
 const request = async (endpoint, options = {}) => {
   const url = `${API_BASE}${endpoint}`;
